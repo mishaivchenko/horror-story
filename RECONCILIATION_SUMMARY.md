@@ -1,9 +1,27 @@
 # Reconciliation Summary
 
-**Date:** 2026-05-24
-**Reviewer:** Codex (architecture/spec review → NOT READY)
-**Reconciler:** Claude Code
-**Result:** READY FOR ISSUE #001
+**Date (pre-#001):** 2026-05-24 — Reconciler: Claude Code → READY FOR ISSUE #001
+**Date (pre-#011):** 2026-05-24 — Final architectural hardening pass → READY FOR ISSUE #011
+**Date (post-MVP):** 2026-05-24 — Commit 6bf3863 — Typography adaptive zones v1 → READY FOR SPRINT 03
+
+---
+
+## Post-MVP correction: Typography adaptive zones v1 (2026-05-24)
+
+**Problem:** `MockTypographyAdapter` rendered the full concatenated script as raw
+full-frame text (EN narration + secondary + all dialogue), covering the entire image.
+The "image is the dominant visual" contract was violated. This was caught before Sprint 03.
+
+**Fix (commit 6bf3863):**
+- Replaced `_render_overlay` with a two-zone safe-area layout (`_pick_zones`).
+- Primary zone: bottom strip for narration.
+- Secondary zone: upper left or right for dialogue (when present).
+- Zone side deterministic via `SHA-256(scene_id:seed)` — no Python `hash()`.
+- Each zone: semi-transparent dark box, text clamped to fit, opaque pixels < 50% of frame.
+- 6 new tests + 2 updated tests.
+- Spec (`spec/PIPELINE.md` Stage 7, `spec/MVP_PLUS.md` F-08) updated to reflect new contract.
+- Backlog issue #006 updated with adaptive zones v1 acceptance criteria.
+- Checkpoint `docs/checkpoints/checkpoint-012.md` written.
 
 ---
 
@@ -190,3 +208,135 @@ These are documented for visibility but do not block Sprint 01:
 ---
 
 ## READY FOR ISSUE #001
+
+---
+
+# Pre-#011 Architectural Hardening Pass
+
+**Date:** 2026-05-24
+**Context:** Issues #001–#010 complete. CLI/e2e wiring (#011) is next.
+**Purpose:** Lock architectural decisions discovered during Sprint 02 before CLI wiring begins.
+
+---
+
+## A. Typography contract hardened
+
+**Contracts locked in `spec/PIPELINE.md` Stage 7:**
+- Typography output for MVP is a transparent RGBA PNG overlay only.
+- Typography stage owns text layout and visual framing only.
+- Typography stage does NOT generate MP4.
+- Typography stage does NOT invoke FFmpeg.
+- Typography stage does NOT own subtitle timing.
+- The compositor owns overlay application to video.
+
+**Future note added:** Timed typography, animated subtitles, PNG sequences, and
+ASS/SRT subtitle pipelines are explicitly Sprint 03+ scope, not MVP.
+
+No remaining spec, backlog, or docs describe typography MP4 output or FFmpeg inside
+the typography stage.
+
+---
+
+## B. Timeline contract hardened
+
+**Architectural law added to `spec/PIPELINE.md` Stage 7.5:**
+
+> "No compositor timing logic may exist outside timeline artifacts."
+
+Explicit contracts locked:
+- `timeline.json` is the sole temporal authority (start_s, end_s, source_path, track
+  ordering, scene duration).
+- The compositor MUST NOT infer timing, reconstruct source paths, calculate implicit
+  durations, or invent track ordering.
+- All future emotion/pacing systems MUST emit explicit `timeline.json` changes before
+  composition runs.
+
+---
+
+## C. Artistic gap documented
+
+**New file: `docs/product/ARTISTIC_GAP.md`**
+
+Explicitly documents:
+- MVP validates technical pipeline integrity only.
+- MVP does NOT validate artistic quality.
+- Passing tests do not imply atmospheric success.
+- Mock outputs are intentionally emotionally empty.
+- Cinematic horror atmosphere does not exist in the current implementation.
+- `mood` metadata is structurally present but artistically inert.
+
+Warning recorded:
+> "The project can reach 100% technical correctness while still producing emotionally
+> dead content."
+
+---
+
+## D. Post-MVP atmosphere phase specified
+
+**New file: `docs/sprints/sprint-03-atmosphere.md`**
+
+Sprint 03 goals documented:
+- One real 30-second scene.
+- One real provider (TTS or image generation, local-first preferred).
+- One human artistic review loop.
+- `mood` must drive at least one observable behavioral difference.
+- Bilingual text or temporary secondary-language removal.
+- Silence/pause logic (optional).
+
+Hard constraints preserved:
+- No batching, no orchestration systems, no fan-out subagents before one scene works.
+- No distributed systems.
+- Single Python process, existing `AdapterFactory`.
+
+**`spec/MVP_PLUS.md`** updated with pointer to Sprint 03 atmosphere phase and the gate:
+no real provider integration until one scene has been confirmed to carry horror atmosphere
+by a human reviewer.
+
+---
+
+## E. Architectural discipline reinforced
+
+**`spec/constitution.md`** updated with "Architectural discipline — always enforced" section:
+
+- No provider integrations before #011/#012 complete.
+- No architecture redesign inside implementation issues.
+- No plugin framework.
+- No distributed systems, message queues, or container orchestration (ever).
+- No async orchestration expansion beyond existing spec requirements.
+- No cinematic engine implementation before one real scene has been human-reviewed.
+- Spec before implementation for any stage contract, artifact schema, or timing change.
+
+Each constraint is documented with its rationale (identified failure mode).
+
+---
+
+## Files changed
+
+| File | Change |
+|------|--------|
+| `spec/PIPELINE.md` | Added typography MVP contract + future-work note; added timeline architectural law |
+| `spec/constitution.md` | Added "Architectural discipline — always enforced" section |
+| `spec/MVP_PLUS.md` | Added Sprint 03 atmosphere phase pointer and provider integration gate |
+| `docs/product/ARTISTIC_GAP.md` | **New.** Artistic gap acknowledgement document |
+| `docs/sprints/sprint-03-atmosphere.md` | **New.** Sprint 03 atmosphere phase plan |
+| `RECONCILIATION_SUMMARY.md` | This section appended |
+
+---
+
+## Remaining ambiguities
+
+1. **Absolute paths in sidecars** — Known tech debt from checkpoint-008 item 6. Not
+   addressed here (runtime behavior change). Must be resolved in or before #011.
+
+2. **`_r<n>` regeneration logic** — Specified in `spec/PIPELINE.md` (Regeneration
+   contract). CLI implementation is #011's responsibility. No spec gap.
+
+3. **Seed XOR formula** — Specified in `spec/TECHNICAL_PLAN.md` but not yet
+   implemented. Only affects real (non-mock) providers. Not a blocker for #011.
+
+4. **`mood` behavioral wiring** — Currently inert. Deferred to Sprint 03 by design.
+   Acknowledged in `docs/product/ARTISTIC_GAP.md`. Not a blocker for #011.
+
+---
+
+## READY FOR ISSUE #011

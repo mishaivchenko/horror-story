@@ -10,17 +10,19 @@
 Implement `horror_story.pipeline.renderer` to concatenate all scene MP4s, add title and
 end cards, and produce the final `final_<story_id>_<seed>.mp4`.
 
+## Status: COMPLETE
+
 ## Acceptance criteria
 
-- [ ] `renderer.render_final(manifest, scene_paths) -> Path` exists
-- [ ] Output MP4: H.264 video, AAC audio, correct resolution from manifest
-- [ ] Title card: 3 seconds, story title + author, white text on black
-- [ ] End card: 2 seconds, black fade
-- [ ] `render_job.json` written and validates against `spec/schemas/render_job.schema.json`
-- [ ] SHA-256 of output written to `render_job.json`
-- [ ] Determinism test: two runs with same seed and mock adapters produce identical SHA-256
-- [ ] `pytest tests/test_renderer.py` passes (requires FFmpeg; skip if absent)
-- [ ] `mypy --strict` passes
+- [x] `renderer.render_final(manifest, scene_paths) -> Path` exists
+- [x] Output MP4: H.264 video, AAC audio, correct resolution from manifest
+- [x] Title card: 3 seconds, story title + author, white text on black
+- [x] End card: 2 seconds, black fade
+- [x] `render_job.json` written and validates against `spec/schemas/render_job.schema.json`
+- [x] SHA-256 of output written to `render_job.json`
+- [x] Determinism test: two runs with same seed and mock adapters produce identical SHA-256
+- [x] `pytest tests/test_renderer.py` passes (requires FFmpeg; skip if absent)
+- [x] `mypy --strict` passes
 
 ## Tasks
 

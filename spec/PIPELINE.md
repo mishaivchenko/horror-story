@@ -123,9 +123,33 @@ WAV: stereo, 44.1 kHz, 16-bit PCM. Duration = scene duration. Mock: silence.
 **Input:** `scripts/script_<id>.json` (all segments + dialogue, both languages)
 **Output:** `video/typography_<scene_id>.png`
 
-Transparent RGBA PNG with bilingual text overlaid (EN upper area, secondary language
-below). No video output; no FFmpeg. Pillow only. The compositor composites this PNG
-onto the motion video frames at Stage 8.
+Transparent RGBA PNG with bilingual text rendered in constrained safe-area boxes.
+No video output; no FFmpeg. Pillow only. The compositor composites this PNG onto the
+motion video frames at Stage 8.
+
+**Adaptive zones v1 layout (current mock contract):**
+- Two possible zones: primary (narration) and secondary (dialogue, optional).
+- **Primary zone:** bottom strip, full width minus margins, max 30% frame height.
+  Contains narration EN text + secondary language text.
+- **Secondary zone:** upper left or right strip, max 50% frame width, max 30% frame height.
+  Present only when `dialogue_lines` is non-empty. Contains dialogue character + text.
+- Zone side (left vs right) derived from `SHA-256(scene_id + ":" + seed)[0] % 2`.
+- Each zone is a semi-transparent dark box (`rgba(0,0,0,160)`) with padding.
+- Text is clamped to fit the box; overflow is truncated, never drawn outside the box.
+- Opaque pixels must stay below 50% of total frame area.
+- Zones must not overlap and must remain within frame bounds.
+- Layout is fully deterministic from `scene_id`, `seed`, `width`, `height`, and script content.
+
+**Typography stage scope — MVP contract:**
+- Typography owns: text layout, font selection, canvas sizing, zone positioning.
+- Typography does NOT: generate MP4, invoke FFmpeg, own subtitle timing, emit video of any kind.
+- Output is always a single transparent RGBA PNG per scene.
+- The compositor (Stage 8) is solely responsible for applying this overlay to video.
+
+**Future work (Sprint 03+ only — NOT MVP):**
+Per-segment timed typography, animated subtitles, per-frame PNG sequences, and
+ASS/SRT subtitle pipelines are out of scope until at least Sprint 03. No spec, issue, or
+implementation should describe typography producing MP4 or invoking FFmpeg.
 
 ---
 
@@ -150,6 +174,18 @@ Timing rules:
 - Motion video: `start_s = 0.0`, `end_s = scene_duration_s`.
 - Typography overlay: `start_s = 0.0`, `end_s = scene_duration_s`.
 - `scene_duration_s = max(motion_duration_s, audio_timeline_end_s, ambient_duration_s)`.
+
+**Timeline architectural law:**
+`timeline.json` is the sole temporal authority for composition. The compositor MUST NOT:
+- infer timing from media file durations
+- reconstruct source paths from naming conventions
+- calculate implicit scene durations
+- invent track ordering
+
+All timing, ordering, and source path information flows through `timeline.json`. Any
+future system that modifies emotion, pacing, or scene rhythm MUST emit explicit changes
+to `timeline.json` artifacts before the compositor runs. No compositor timing logic may
+exist outside timeline artifacts.
 
 See `spec/schemas/timeline.schema.json`.
 

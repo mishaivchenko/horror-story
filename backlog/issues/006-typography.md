@@ -13,19 +13,33 @@ Typography is NOT responsible for video generation. It produces a single composi
 transparent overlay image. FFmpeg / video composition is the compositor's responsibility
 (issue #009).
 
+### Status: COMPLETE (adaptive zones v1 shipped post-MVP)
+
 ### Acceptance criteria
-- [ ] `TypographyAdapter` ABC in `horror_story/adapters/typography/base.py` with signature:
+- [x] `TypographyAdapter` ABC in `horror_story/adapters/typography/base.py` with signature:
       `render(self, script_path: Path, duration_s: float, width: int, height: int, fps: int, seed: int, out_path: Path) -> Path`
-- [ ] Output is a **transparent RGBA PNG** (not MP4); `out_path` ends in `.png`
-- [ ] EN text rendered in upper area of the transparent canvas
-- [ ] Secondary language text rendered below EN text in smaller font
-- [ ] Both language tracks visible when composited onto any background (RGBA mode)
-- [ ] Same inputs + seed → same output bytes (deterministic)
-- [ ] `typography_<scene_id>.json` sidecar written at `out_path.with_suffix('.json')` and
+- [x] Output is a **transparent RGBA PNG** (not MP4); `out_path` ends in `.png`
+- [x] Narration text in bottom safe-area box; dialogue (when present) in upper left/right box
+- [x] Both language tracks visible within constrained semi-transparent boxes
+- [x] Opaque pixels < 50% of frame — image remains dominant visual element
+- [x] Zone layout deterministic from `scene_id + seed` (SHA-256, not `hash()`)
+- [x] No zone overlap; all zones within frame bounds
+- [x] Same inputs + seed → same output bytes (deterministic)
+- [x] `typography_<scene_id>.json` sidecar written at `out_path.with_suffix('.json')` and
       validates against `spec/schemas/typography_artifact.schema.json`
-- [ ] Adapter registered: `AdapterFactory.get_typography("mock") -> MockTypographyAdapter`
-- [ ] `pytest tests/test_typography.py` passes with ≥ 85% coverage on `typography/`
-- [ ] `mypy --strict` passes
+- [x] Adapter registered: `AdapterFactory.get_typography("mock") -> MockTypographyAdapter`
+- [x] `pytest tests/test_typography.py` passes (28 tests)
+- [x] `mypy --strict` passes
+
+### Adaptive zones v1 contract (added after MVP)
+
+Layout uses up to two zones:
+- **Primary** (narration): bottom strip, full width minus margins, 30% frame height max.
+- **Secondary** (dialogue): upper left or right, 50% frame width max, 30% frame height max.
+  Only rendered when `dialogue_lines` is non-empty.
+
+Zone side (left vs right) is derived from `SHA-256(scene_id + ":" + seed)[0] % 2`.
+Text is clamped (truncated) rather than overflowing. Background box: `rgba(0,0,0,160)`.
 
 ### Output artifact
 ```

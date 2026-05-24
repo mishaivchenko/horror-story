@@ -35,11 +35,17 @@ Each stage can be re-run independently by scene ID.
 
 ## Status
 
-**Phase 1 — Scaffold complete** (Issue #001 done; Sprint 01 in progress)
+**Sprint 02 complete — MVP shipped.** All 12 pipeline issues (#001–#012) are done.
+The full chain from `story.txt` to `final_<story_id>_<seed>.mp4` runs end-to-end with
+mock adapters. 240 tests passing, mypy clean, 12 schemas validated.
+
+**Next:** Sprint 03 — Atmosphere Phase. Replace one mock with a real provider (TTS or
+image generation) and produce a watchable 30-second horror scene.
 
 See [`spec/MVP_PLUS.md`](spec/MVP_PLUS.md) for the feature specification.
-See [`docs/sprints/sprint-01.md`](docs/sprints/sprint-01.md) for the current sprint.
-See [`backlog/issues/`](backlog/issues/) for the GitHub Issues backlog.
+See [`docs/sprints/sprint-03-atmosphere.md`](docs/sprints/sprint-03-atmosphere.md) for what's next.
+See [`docs/product/ARTISTIC_GAP.md`](docs/product/ARTISTIC_GAP.md) for the artistic gap acknowledgement.
+See [`backlog/issues/`](backlog/issues/) for the full issue history.
 
 ## Quick start
 
@@ -76,10 +82,13 @@ markdownlint spec/
 
 ```
 spec/           Spec Kit — specs, constitution, schemas (source of truth)
-backlog/        Draft GitHub Issues
-docs/           ADRs, sprint plans
-src/            Implementation (not yet started)
-tests/          Test suite (not yet started)
+backlog/issues/ Draft GitHub Issues backlog
+docs/adr/       Architecture Decision Records
+docs/sprints/   Sprint plans
+docs/checkpoints/ Post-issue quality checkpoints
+docs/product/   Artistic gap, strategic analysis
+src/            Python source (package: horror_story)
+tests/          Pytest test suite
 output/         Generated artifacts (gitignored)
 .github/        CI workflows and issue templates
 ```

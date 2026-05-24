@@ -1,6 +1,6 @@
 # Technical Plan
 
-**Status:** Draft
+**Status:** Current (MVP complete as of 2026-05-24)
 
 ---
 
@@ -37,6 +37,7 @@ src/horror_story/
 │   ├── __init__.py
 │   ├── parse.py            # F-01: Story parser → scene JSONs
 │   ├── script.py           # F-02: Script generator (mock bilingual)
+│   ├── timeline.py         # Stage 7.5: Timeline planner (per-scene timing)
 │   ├── compositor.py       # F-09: Scene compositor (FFmpeg)
 │   └── renderer.py         # F-10: Final renderer (FFmpeg)
 ├── adapters/
@@ -95,6 +96,9 @@ src/horror_story/
     │
     └─▶ typography/mock.py
             [video/typography_<id>.png]  ← transparent RGBA PNG overlay
+                │
+                ▼ timeline.py (Stage 7.5: pure function, reads sidecars)
+            [video/timeline_<id>.json]
                 │
                 ▼ compositor.py (FFmpeg: overlay + amix)
             [video/scene_<id>_composed.mp4]

@@ -87,11 +87,14 @@ mock adapters, then begin replacing mocks with real providers one at a time.
 
 ### F-08: Typography overlay
 - Renders bilingual subtitle/overlay text as a transparent RGBA PNG.
-- EN text in upper area; secondary language below in smaller typeface.
-- Mock adapter: renders text onto a transparent canvas using Pillow. No FFmpeg.
+- **Adaptive zones v1 layout:** narration in a bottom safe-area box; dialogue (when present)
+  in an upper left/right box. Zone side derived from `SHA-256(scene_id:seed)`.
+- Text constrained to its box; opaque pixels < 50% of frame. Image is dominant visual.
+- Mock adapter: Pillow only. No FFmpeg.
 - Output: `typography_<scene_id>.png` (transparent RGBA PNG overlay)
 - The compositor (F-09) is responsible for compositing this PNG onto video frames.
-- **Acceptance:** PNG is RGBA, text is legible, both languages present. Mock is unit-tested.
+- **Acceptance:** PNG is RGBA, text visible in boxes, both languages present, opaque < 50%
+  frame, two-zone layout when dialogue present, layout is deterministic. Mock is unit-tested.
 
 ### F-09: Scene compositor
 - Combines motion video, ambient audio, narration audio, dialogue audio, and the
@@ -135,3 +138,19 @@ mock adapters, then begin replacing mocks with real providers one at a time.
 - Progress bar / TUI
 - Web preview
 - Any scene > 2 minutes of audio
+
+---
+
+## After MVP+: Sprint 03 Atmosphere Phase
+
+After the full *Pigeons from Hell* mock run completes, the next milestone is producing
+**one real 30-second scene** with at least one real provider. This is not MVP+ scope —
+it begins after MVP+ acceptance criteria pass.
+
+See `docs/sprints/sprint-03-atmosphere.md` for the Sprint 03 plan and
+`docs/product/ARTISTIC_GAP.md` for the documented gap between technical correctness and
+atmospheric quality.
+
+**The gate:** No real provider integration, no scale-out, no fan-out subagents, no
+distributed systems — until one scene has been watched by a human and confirmed to carry
+horror atmosphere. Technical correctness is a precondition, not the destination.
