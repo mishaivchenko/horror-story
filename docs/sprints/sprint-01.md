@@ -29,9 +29,9 @@ artifacts generated for every segment. **No video output in Sprint 01.** Video r
 
 | Issue | Title | Estimate |
 |-------|-------|----------|
-| #006 | Motion adapter (mock-first) | 0.5d |
-| #007 | Ambient audio adapter (mock-first) | 0.25d |
-| #008 | Typography overlay (mock-first) | 0.5d |
+| #006 | Typography overlay (mock-first, PNG) | 0.5d |
+| #007 | Motion adapter (mock-first) | 0.5d |
+| #008 | Ambient audio adapter (mock-first) | 0.25d |
 | #009 | Scene compositor | 1d |
 | #010 | Final renderer | 0.5d |
 | #011 | End-to-end CLI | 0.5d |

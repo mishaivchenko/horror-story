@@ -27,7 +27,7 @@
           "keyframe":  { "type": ["string", "null"], "description": "Relative path to keyframe PNG." },
           "motion":    { "type": ["string", "null"], "description": "Relative path to motion MP4." },
           "ambient":   { "type": ["string", "null"], "description": "Relative path to ambient WAV." },
-          "typography":{ "type": ["string", "null"], "description": "Relative path to typography MP4." },
+          "typography":{ "type": ["string", "null"], "description": "Relative path to typography overlay PNG." },
           "composed":  { "type": ["string", "null"], "description": "Relative path to composed scene MP4." },
           "status": {
             "type": "string",

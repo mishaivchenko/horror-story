@@ -41,7 +41,7 @@ mock adapters, with every stage producing valid artifacts. This is the definitio
 |---------|-------------|
 | F-06 | Motion mock: PNG → looping silent MP4 |
 | F-07 | Ambient audio mock: mood → silent stereo WAV |
-| F-08 | Typography mock: script → bilingual-text MP4 |
+| F-08 | Typography mock: script → transparent PNG overlay |
 | F-09 | Scene compositor: combine all artifacts → scene MP4 |
 | F-10 | Final renderer: concatenate scenes → final MP4 |
 | F-11 | CLI: `run`, `--scene`, `--dry-run`, `--validate`, `--seed` |

@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+from horror_story.adapters.audio.base import AudioAdapter
+from horror_story.adapters.audio.mock import MockAudioAdapter
 from horror_story.adapters.image.base import ImageAdapter
 from horror_story.adapters.image.mock import MockImageAdapter
+from horror_story.adapters.motion.base import MotionAdapter
+from horror_story.adapters.motion.mock import MockMotionAdapter
 from horror_story.adapters.tts.base import TTSAdapter
 from horror_story.adapters.tts.mock import MockTTSAdapter
 from horror_story.adapters.typography.base import TypographyAdapter
@@ -26,3 +30,15 @@ class AdapterFactory:
         if name == "mock":
             return MockTypographyAdapter()
         raise ValueError(f"unknown typography adapter: {name!r}")
+
+    @staticmethod
+    def get_motion(name: str) -> MotionAdapter:
+        if name == "mock":
+            return MockMotionAdapter()
+        raise ValueError(f"unknown motion adapter: {name!r}")
+
+    @staticmethod
+    def get_audio(name: str) -> AudioAdapter:
+        if name == "mock":
+            return MockAudioAdapter()
+        raise ValueError(f"unknown audio adapter: {name!r}")

@@ -102,8 +102,8 @@ PNG: 3840×2160 (or lower for dev mode). Mock: grey background, scene ID as whit
 **Input:** `frames/keyframe_<scene_id>.png`, duration from script
 **Output:** `frames/motion_<scene_id>.mp4`
 
-MP4: 24 fps, H.264, no audio. Duration = sum of `pacing_ms` for the scene.
-Mock: repeats the keyframe for the full duration.
+MP4: H.264, no audio. fps = caller-supplied value from render config (default 24).
+Duration = sum of `pacing_ms` for the scene. Mock: repeats the keyframe for the full duration.
 
 ---
 
@@ -121,22 +121,23 @@ WAV: stereo, 44.1 kHz, 16-bit PCM. Duration = scene duration. Mock: silence.
 
 **Module:** `horror_story.adapters.typography.mock` (via `TypographyAdapter`)
 **Input:** `scripts/script_<id>.json` (all segments + dialogue, both languages)
-**Output:** `video/typography_<scene_id>.mp4`
+**Output:** `video/typography_<scene_id>.png`
 
-MP4 with burned-in bilingual text overlays (no audio). Same duration as motion video.
-Mock: uses Pillow to render text on black frames.
+Transparent RGBA PNG with bilingual text overlaid (EN upper area, secondary language
+below). No video output; no FFmpeg. Pillow only. The compositor composites this PNG
+onto the motion video frames at Stage 8.
 
 ---
 
 ## Stage 8: Scene compositor
 
 **Module:** `horror_story.pipeline.compositor`
-**Input:** `frames/motion_<scene_id>.mp4`, all audio WAVs, `video/typography_<scene_id>.mp4`
+**Input:** `frames/motion_<scene_id>.mp4`, all audio WAVs, `video/typography_<scene_id>.png`
 **Output:** `video/scene_<scene_id>_composed.mp4`
 
 FFmpeg pipeline:
-1. Overlay typography on motion video.
-2. Mix narration + dialogue + ambient into single stereo audio track.
+1. Alpha-composite the typography PNG overlay onto the motion video (`overlay` filter).
+2. Mix narration + dialogue + ambient into single stereo audio track (`amix`).
 3. Mux video + audio into output MP4.
 
 All timing is driven by `pacing_ms` from the script. Narration and ambient play

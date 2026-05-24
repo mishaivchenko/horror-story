@@ -94,9 +94,9 @@ src/horror_story/
     │       [audio/ambient_<id>.wav]
     │
     └─▶ typography/mock.py
-            [video/typography_<id>.mp4]
+            [video/typography_<id>.png]  ← transparent RGBA PNG overlay
                 │
-                ▼ compositor.py (FFmpeg)
+                ▼ compositor.py (FFmpeg: overlay + amix)
             [video/scene_<id>_composed.mp4]
                 │
                 ▼ renderer.py (FFmpeg)
@@ -107,7 +107,7 @@ src/horror_story/
 
 ## Adapter interface contracts
 
-All adapters follow the same structural pattern: one primary method, `seed` always last,
+All adapters follow the same structural pattern: one primary method, `seed` immediately before `out_path` (second-to-last),
 returns the `Path` of the written artifact. A JSON sidecar (artifact record) is written
 alongside each artifact by the adapter.
 
@@ -179,7 +179,7 @@ class TypographyAdapter(ABC):
 **Rules:**
 - `out_path` is the caller-supplied destination; the adapter writes to a temp path and
   replaces `out_path` atomically via `Path.replace()`.
-- `seed` is always the last positional argument before `out_path`.
+- `seed` is always the last positional argument before `out_path` (i.e. second-to-last).
 - Adapters are instantiated once per pipeline run via a factory keyed on the adapter name
   from `pipeline.toml`. They are passed explicitly to each stage function (no globals).
 
@@ -260,7 +260,7 @@ adapter versions, every artifact's *content* is reproducible. This is the guaran
 non-contract metadata and may differ across runs or machines.
 
 **Practical rules:**
-1. Every adapter's primary method accepts `seed: int` as its last argument.
+1. Every adapter's primary method accepts `seed: int` as the second-to-last positional argument (immediately before `out_path`).
 2. Per-artifact seed: `manifest.seed ^ (scene_index * 1000) ^ stage_index`. This is
    computed by the calling stage function, not the adapter.
 3. FFmpeg is invoked with fixed ordered arguments. No `-metadata` flags that embed timestamps.

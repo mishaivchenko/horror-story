@@ -71,8 +71,8 @@ mock adapters, then begin replacing mocks with real providers one at a time.
 
 ### F-06: Motion / VFX
 - Applies subtle animation to the keyframe (parallax, slow zoom, light flicker).
-- Mock adapter: outputs an unmodified copy of the input PNG as a 3-second 24fps
-  silent video (MP4 with single repeated frame).
+- Mock adapter: outputs the input PNG as a silent MP4 (single repeated frame) of
+  `duration_s` seconds at the caller-supplied `fps`.
 - Interface: `MotionAdapter.animate(frame_path, duration_s, fps, effect, seed, out_path) -> Path`
 - Output: `motion_<scene_id>.mp4`
 - **Acceptance:** Valid MP4, correct duration, mock is unit-tested.
@@ -86,16 +86,18 @@ mock adapters, then begin replacing mocks with real providers one at a time.
 - **Acceptance:** Valid WAV, stereo, correct duration. Mock is unit-tested.
 
 ### F-08: Typography overlay
-- Renders bilingual subtitle/overlay text onto video frames.
-- EN line at top; UK line below in smaller typeface.
-- Mock adapter: burns text onto a black frame using Pillow; no motion.
-- Output: `typography_<scene_id>.mp4` (video with text, no audio)
-- **Acceptance:** Text is legible, both languages present. Mock is unit-tested.
+- Renders bilingual subtitle/overlay text as a transparent RGBA PNG.
+- EN text in upper area; secondary language below in smaller typeface.
+- Mock adapter: renders text onto a transparent canvas using Pillow. No FFmpeg.
+- Output: `typography_<scene_id>.png` (transparent RGBA PNG overlay)
+- The compositor (F-09) is responsible for compositing this PNG onto video frames.
+- **Acceptance:** PNG is RGBA, text is legible, both languages present. Mock is unit-tested.
 
 ### F-09: Scene compositor
-- Combines motion video, ambient audio, narration audio, dialogue audio, and typography
-  into a single scene video (MP4).
-- Uses FFmpeg for mixing. All timings driven by script `pacing` field.
+- Combines motion video, ambient audio, narration audio, dialogue audio, and the
+  typography transparent PNG overlay into a single scene video (MP4).
+- Uses FFmpeg for all mixing and compositing. All timings driven by script `pacing` field.
+- FFmpeg overlay filter alpha-composites the typography PNG onto the motion video.
 - Output: `scene_<scene_id>_composed.mp4`
 - **Acceptance:** Valid MP4 with audio track. Duration matches sum of dialogue + narration.
 

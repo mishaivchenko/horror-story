@@ -4,7 +4,7 @@
   "title": "Motion Artifact",
   "description": "Sidecar record for a generated motion/VFX MP4 file.",
   "type": "object",
-  "required": ["schema_version", "story_id", "scene_id", "source_keyframe", "duration_s", "fps", "seed", "adapter", "output_path", "status"],
+  "required": ["schema_version", "story_id", "scene_id", "source_keyframe", "duration_s", "fps", "effect", "seed", "adapter", "output_path", "status"],
   "additionalProperties": false,
   "properties": {
     "schema_version": { "type": "string", "const": "1.0" },
@@ -27,6 +27,8 @@
       "type": "string",
       "enum": ["pending", "generated", "failed"]
     },
+    "width":  { "type": "integer", "minimum": 1, "description": "Output video width in pixels (same as source keyframe)." },
+    "height": { "type": "integer", "minimum": 1, "description": "Output video height in pixels (same as source keyframe)." },
     "error": { "type": ["string", "null"] }
   }
 }
