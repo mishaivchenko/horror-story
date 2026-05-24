@@ -1,0 +1,13 @@
+{
+  "schema_version": "1.0",
+  "story_id": "pigeons-from-hell",
+  "scene_id": "scene_001",
+  "prompt": "A weathered plantation house looms under a blood-red moon.",
+  "width": 640,
+  "height": 360,
+  "seed": 42,
+  "adapter": "mock",
+  "output_path": "output/pigeons-from-hell/keyframes/scene_001.png",
+  "status": "generated",
+  "error": null
+}

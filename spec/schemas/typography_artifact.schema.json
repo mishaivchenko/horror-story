@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "horror-story/typography-artifact",
   "title": "Typography Artifact",
-  "description": "Sidecar record for a generated bilingual text overlay MP4.",
+  "description": "Sidecar record for a generated bilingual transparent PNG text overlay.",
   "type": "object",
   "required": ["schema_version", "story_id", "scene_id", "source_script", "duration_s", "width", "height", "fps", "seed", "adapter", "output_path", "status"],
   "additionalProperties": false,
