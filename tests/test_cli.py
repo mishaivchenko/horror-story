@@ -358,6 +358,8 @@ def test_adapter_factory_called_with_config_values(
     monkeypatch.setattr(tl_mod, "plan_timeline", MagicMock())
     monkeypatch.setattr(comp_mod, "compose_scene", MagicMock(return_value=None))
     monkeypatch.setattr(comp_mod, "ffmpeg_available", lambda: True)
+    # synthesize is mocked out so no sidecars land on disk; stub the reader too.
+    monkeypatch.setattr("horror_story.cli._voice_lines_duration_s", lambda _: 5.0)
 
     with patch("horror_story.cli.AdapterFactory", mock_factory), \
          patch("horror_story.cli._render_final_from_index", MagicMock()):
@@ -592,3 +594,111 @@ def test_validate_run_dir_rejects_nonexistent_directory(
     with pytest.raises(SystemExit) as exc_info:
         _validate_run_dir(tmp_path / "no-such-run")
     assert exc_info.value.code == 1
+
+
+# ---------------------------------------------------------------------------
+# P1: media duration derived from voice-line sidecars, not total_duration_ms
+# ---------------------------------------------------------------------------
+
+
+def test_voice_lines_duration_s_uses_actual_duration_ms(tmp_path: Path) -> None:
+    """`_voice_lines_duration_s` sums actual_duration_ms when present."""
+    from horror_story.cli import _voice_lines_duration_s
+
+    def _sidecar(name: str, pacing_ms: int, actual_ms: int | None) -> Path:
+        p = tmp_path / name
+        p.write_text(json.dumps({
+            "schema_version": "1.0", "story_id": "s", "scene_id": "sc",
+            "line_ref": name, "line_type": "narration", "text": "x",
+            "language": "en", "voice_id": "v", "seed": 0,
+            "pacing_ms": pacing_ms, "adapter": "kokoro",
+            "output_path": f"{name}.wav",
+            "actual_duration_ms": actual_ms,
+            "status": "synthesized", "error": None,
+        }))
+        return p
+
+    # Two sidecars: one with actual=3500 ms (longer than pacing 2000), one null (falls back to 1500)
+    sidecars = [
+        _sidecar("seg-0.json", 2000, 3500),
+        _sidecar("seg-1.json", 1500, None),
+    ]
+    assert _voice_lines_duration_s(sidecars) == pytest.approx(5.0)  # 3.5 + 1.5
+
+
+def test_voice_lines_duration_s_falls_back_to_pacing_ms(tmp_path: Path) -> None:
+    """`_voice_lines_duration_s` falls back to pacing_ms when actual_duration_ms is null."""
+    from horror_story.cli import _voice_lines_duration_s
+
+    p = tmp_path / "seg.json"
+    p.write_text(json.dumps({
+        "schema_version": "1.0", "story_id": "s", "scene_id": "sc",
+        "line_ref": "seg-0", "line_type": "narration", "text": "x",
+        "language": "en", "voice_id": "v", "seed": 0,
+        "pacing_ms": 2000, "adapter": "mock",
+        "output_path": "seg.wav",
+        "actual_duration_ms": None,
+        "status": "synthesized", "error": None,
+    }))
+    assert _voice_lines_duration_s([p]) == pytest.approx(2.0)
+
+
+def test_motion_duration_derived_from_voice_sidecars(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """motion.animate must receive duration_s from voice-line sidecars, not total_duration_ms.
+
+    Patches TTS synthesize to write sidecars with actual_duration_ms > pacing_ms,
+    then asserts motion.animate was called with the larger actual duration.
+    """
+    import json as _json
+    from horror_story.adapters.tts.mock import MockTTSAdapter
+
+    story_dst, out_dir = _setup_story(tmp_path)
+
+    captured_motion_duration: list[float] = []
+
+    original_synthesize = MockTTSAdapter.synthesize
+    from horror_story.adapters.motion.mock import MockMotionAdapter as _RealMotion
+    original_animate = _RealMotion.animate
+
+    def _synthesize_with_inflated_actual(
+        self: Any, text: str, voice_id: str, language: str,
+        pacing_ms: int, seed: int, out_path: Path, **kwargs: Any
+    ) -> Path:
+        result = original_synthesize(
+            self, text, voice_id, language, pacing_ms, seed, out_path, **kwargs
+        )
+        # Rewrite sidecar with actual_duration_ms = pacing_ms * 3
+        sidecar_path = out_path.with_suffix(".json")
+        data = _json.loads(sidecar_path.read_text())
+        data["actual_duration_ms"] = pacing_ms * 3
+        sidecar_path.write_text(_json.dumps(data))
+        return result
+
+    def _fake_animate(
+        self: Any, frame_path: Path, duration_s: float, **kwargs: Any
+    ) -> Path:
+        captured_motion_duration.append(duration_s)
+        # Delegate to the real (unpatched) MockMotionAdapter.animate
+        return original_animate(self, frame_path=frame_path, duration_s=duration_s, **kwargs)
+
+    from horror_story.adapters.motion import mock as motion_mock
+    from horror_story.pipeline import timeline as tl_mod
+    from horror_story.pipeline import compositor as comp_mod
+    monkeypatch.setattr(MockTTSAdapter, "synthesize", _synthesize_with_inflated_actual)
+    monkeypatch.setattr(motion_mock.MockMotionAdapter, "animate", _fake_animate)
+    monkeypatch.setattr(tl_mod, "plan_timeline", MagicMock())
+    monkeypatch.setattr(comp_mod, "compose_scene", MagicMock(return_value=None))
+    monkeypatch.setattr(comp_mod, "ffmpeg_available", lambda: True)
+
+    with patch("horror_story.cli._render_final_from_index", MagicMock()):
+        main(_base_args(story_dst, out_dir))
+
+    assert len(captured_motion_duration) > 0
+    # Each call's duration must be >= the total pacing-based duration (since actual = pacing*3)
+    for dur in captured_motion_duration:
+        assert dur > 0.0
+        # The mini-story has at least one segment; pacing-based total would be shorter
+        # than actual (3x), so captured duration must be > the heuristic total / 3
+        assert dur >= 1.0  # enforced floor

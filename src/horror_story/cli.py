@@ -199,8 +199,7 @@ def _run_scene(
         # Stage 6/7: motion
         mot_seed = _per_scene_seed(seed, scene_index, 6)
         motion_path = frames_dir / f"motion_{scene_id}{suffix}.mp4"
-        duration_s = script.total_duration_ms / 1000.0
-        duration_s = max(duration_s, 1.0)
+        duration_s = max(_voice_lines_duration_s(voice_line_sidecars), 1.0)
         print(f"[motion] {scene_id} → {motion_path}")
         AdapterFactory.get_motion(adapters.motion).animate(
             frame_path=keyframe_path,
@@ -271,6 +270,16 @@ def _run_scene(
     except Exception as exc:
         _set_scene_failed(index_path, scene_id)
         return None, str(exc)
+
+
+def _voice_lines_duration_s(sidecar_paths: list[Path]) -> float:
+    """Sum actual_duration_ms (falling back to pacing_ms) across all voice-line sidecars."""
+    total_ms = 0
+    for p in sidecar_paths:
+        data = json.loads(p.read_text())
+        actual = data.get("actual_duration_ms")
+        total_ms += int(actual) if actual is not None else int(data["pacing_ms"])
+    return total_ms / 1000.0
 
 
 def _atomic_write(path: Path, content: str) -> None:
