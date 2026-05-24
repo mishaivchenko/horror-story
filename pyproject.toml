@@ -17,6 +17,7 @@ dev = [
     "mypy>=1.10",
     "jsonschema>=4.22",
     "types-jsonschema>=4.22",
+    "yamllint>=1.38",
 ]
 
 [tool.setuptools.packages.find]
@@ -28,3 +29,4 @@ strict = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+

@@ -1,6 +1,6 @@
 # Sprint 03 — Atmosphere Phase
 
-**Status:** Planned (begins after MVP ships)
+**Status:** Active (started 2026-05-24)
 **Prerequisite:** Issue #011 (CLI wiring) and #012 (CI) complete; MVP acceptance criteria
 all passing.
 
@@ -77,6 +77,19 @@ Sprint 03 work begins:
 2. Absolute paths in sidecar files replaced with relative paths (known tech debt from
    checkpoint-008).
 3. CLI `--scene` partial re-run wired and tested (from #011).
+
+---
+
+## Issues
+
+| # | Title | Status | Depends on |
+|---|-------|--------|------------|
+| #013 | Sidecar paths: absolute → relative | Open | — |
+| #014 | Wire AdapterFactory in CLI | Open | #013 |
+| #015 | Mood → pacing wiring | Open | — |
+| #016 | Local TTS adapter: Kokoro | Open | #013, #014 |
+| #017 | Pigeons from Hell: story file + real scene run | Open | #013, #014, #015, #016 |
+| #018 | Sprint 03 human review checkpoint | Open | #017 |
 
 ---
 

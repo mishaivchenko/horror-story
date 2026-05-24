@@ -99,3 +99,26 @@ These are non-negotiable. Any proposal that violates them is out of scope.
 - Languages beyond EN + one target language
 - Stories other than *Pigeons from Hell*
 - Any distribution or publishing automation
+
+---
+
+## Architectural discipline — always enforced
+
+These constraints apply at every sprint, not just MVP:
+
+- **No provider integrations before CLI wiring is complete (#011, #012).** The gate for
+  real providers is a working end-to-end CLI run on the mini-story fixture, not individual
+  adapter unit tests passing.
+- **No architecture redesign inside implementation issues.** Redesign requires a spec PR
+  with ADR justification.
+- **No plugin framework.** Adapters are selected by `pipeline.toml` config, instantiated
+  by `AdapterFactory`. No dynamic loading, no registry, no hook system.
+- **No distributed systems, message queues, or container orchestration.** Ever.
+- **No async orchestration expansion** beyond what an existing spec explicitly requires.
+- **No cinematic engine implementation** before one real scene has been reviewed by a
+  human and confirmed to have atmospheric value. See `docs/product/ARTISTIC_GAP.md`.
+- **Spec before implementation.** Any change to a stage contract, artifact schema, or
+  timing model requires a spec update committed before implementation begins.
+
+These constraints exist because each one was identified as a specific failure mode or
+overengineering path. They are not suggestions.

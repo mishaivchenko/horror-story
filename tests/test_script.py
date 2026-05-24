@@ -106,18 +106,21 @@ def test_segment_ids_match_schema_pattern() -> None:
             assert pattern.match(seg.segment_id)
 
 
-def test_segment_pacing_ms_minimum_500() -> None:
+def test_segment_pacing_ms_minimum_400() -> None:
     for scene in _scenes():
         script = generate_script(scene, _MANIFEST)
         for seg in script.segments:
-            assert seg.pacing_ms >= 500
+            assert seg.pacing_ms >= 400
 
 
 def test_segment_pacing_ms_formula() -> None:
+    from horror_story.pipeline.script import _MOOD_PACING
     for scene in _scenes():
         script = generate_script(scene, _MANIFEST)
+        multiplier = _MOOD_PACING.get(scene.mood, 1.0)
         for seg in script.segments:
-            expected = max(500, len(seg.text_en.split()) * 100)
+            base = max(500, len(seg.text_en.split()) * 100)
+            expected = round(base * multiplier)
             assert seg.pacing_ms == expected
 
 
@@ -229,10 +232,13 @@ def test_dialogue_voice_id_fallback_to_narrator() -> None:
 
 
 def test_dialogue_pacing_ms_formula() -> None:
+    from horror_story.pipeline.script import _MOOD_PACING
     for scene in _scenes():
         script = generate_script(scene, _MANIFEST)
+        multiplier = _MOOD_PACING.get(scene.mood, 1.0)
         for dlg in script.dialogue_lines:
-            expected = max(500, len(dlg.text_en.split()) * 100)
+            base = max(500, len(dlg.text_en.split()) * 100)
+            expected = round(base * multiplier)
             assert dlg.pacing_ms == expected
 
 
@@ -264,6 +270,79 @@ def test_dialogue_insert_after_none_when_dialogue_first() -> None:
     )
     script = generate_script(scene, _MANIFEST)
     assert script.dialogue_lines[0].insert_after_segment is None
+
+
+# ---------------------------------------------------------------------------
+# Mood pacing multipliers (Issue #015)
+# ---------------------------------------------------------------------------
+
+def test_tension_scene_pacing_is_80_percent() -> None:
+    scene = Scene(
+        story_id=STORY_ID,
+        scene_id="test-tension",
+        index=0,
+        text="He burst through the door gun raised quick and alert danger sudden shot.",
+        visual_description="He burst through the door.",
+        mood="tension",
+        word_count=14,
+    )
+    script = generate_script(scene, _MANIFEST)
+    for seg in script.segments:
+        base = max(500, len(seg.text_en.split()) * 100)
+        assert seg.pacing_ms == round(base * 0.80)
+
+
+def test_silence_scene_pacing_is_125_percent() -> None:
+    scene = Scene(
+        story_id=STORY_ID,
+        scene_id="test-silence",
+        index=0,
+        text="The room was still and empty and quiet and hush and motionless nothing stirred.",
+        visual_description="The room was still.",
+        mood="silence",
+        word_count=14,
+    )
+    script = generate_script(scene, _MANIFEST)
+    for seg in script.segments:
+        base = max(500, len(seg.text_en.split()) * 100)
+        assert seg.pacing_ms == round(base * 1.25)
+
+
+def test_neutral_scene_pacing_unchanged() -> None:
+    scene = Scene(
+        story_id=STORY_ID,
+        scene_id="test-neutral",
+        index=0,
+        text="The man walked down the road toward the village in the afternoon.",
+        visual_description="The man walked down the road.",
+        mood="neutral",
+        word_count=13,
+    )
+    script = generate_script(scene, _MANIFEST)
+    for seg in script.segments:
+        base = max(500, len(seg.text_en.split()) * 100)
+        assert seg.pacing_ms == base
+
+
+def test_script_has_mood_field() -> None:
+    scene = _scenes()[0]
+    script = generate_script(scene, _MANIFEST)
+    assert hasattr(script, "mood")
+    assert script.mood == scene.mood
+
+
+def test_script_mood_matches_scene_mood_for_all_scenes() -> None:
+    for scene in _scenes():
+        script = generate_script(scene, _MANIFEST)
+        assert script.mood == scene.mood
+
+
+def test_script_to_dict_includes_mood() -> None:
+    for scene in _scenes():
+        script = generate_script(scene, _MANIFEST)
+        d = script.to_dict()
+        assert "mood" in d
+        assert d["mood"] == scene.mood
 
 
 # ---------------------------------------------------------------------------

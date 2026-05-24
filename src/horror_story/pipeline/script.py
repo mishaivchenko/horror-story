@@ -18,8 +18,17 @@ def mock_translate(text: str) -> str:
     return "[uk] " + " ".join(reversed(words))
 
 
-def _pacing_ms(word_count: int) -> int:
-    return max(500, word_count * 100)
+_MOOD_PACING: dict[str, float] = {
+    "tension":  0.80,
+    "violence": 0.80,
+    "silence":  1.25,
+    "mystery":  1.25,
+}
+
+
+def _pacing_ms(word_count: int, mood: str = "neutral") -> int:
+    base = max(500, word_count * 100)
+    return round(base * _MOOD_PACING.get(mood, 1.0))
 
 
 def _split_narration(text: str) -> list[str]:
@@ -56,7 +65,7 @@ def generate_script(scene: Scene, manifest: Manifest) -> Script:
                 segment_id=f"seg-{i}",
                 text_en=seg_text,
                 text_secondary=mock_translate(seg_text),
-                pacing_ms=_pacing_ms(word_count),
+                pacing_ms=_pacing_ms(word_count, scene.mood),
                 voice_id=narrator_voice,
             )
         )
@@ -74,7 +83,7 @@ def generate_script(scene: Scene, manifest: Manifest) -> Script:
                 character=character,
                 text_en=text_en,
                 text_secondary=mock_translate(text_en),
-                pacing_ms=_pacing_ms(word_count),
+                pacing_ms=_pacing_ms(word_count, scene.mood),
                 voice_id=voice_id,
                 insert_after_segment=insert_after,
             )
@@ -83,6 +92,7 @@ def generate_script(scene: Scene, manifest: Manifest) -> Script:
     return Script(
         story_id=scene.story_id,
         scene_id=scene.scene_id,
+        mood=scene.mood,
         segments=segments,
         dialogue_lines=dialogue_lines,
     )

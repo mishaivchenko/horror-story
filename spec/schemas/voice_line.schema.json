@@ -26,7 +26,7 @@
     },
     "voice_id": { "type": "string" },
     "seed": { "type": "integer", "minimum": 0 },
-    "pacing_ms": { "type": "integer", "minimum": 500 },
+    "pacing_ms": { "type": "integer", "minimum": 400 },
     "adapter": { "type": "string" },
     "output_path": { "type": "string" },
     "actual_duration_ms": {

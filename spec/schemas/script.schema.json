@@ -4,12 +4,16 @@
   "title": "Scene Script",
   "description": "Bilingual narration script with dialogue lines for a single scene.",
   "type": "object",
-  "required": ["schema_version", "story_id", "scene_id", "segments", "dialogue_lines", "total_duration_ms"],
+  "required": ["schema_version", "story_id", "scene_id", "mood", "segments", "dialogue_lines", "total_duration_ms"],
   "additionalProperties": false,
   "properties": {
     "schema_version": { "type": "string", "const": "1.0" },
     "story_id": { "type": "string" },
     "scene_id": { "type": "string" },
+    "mood": {
+      "type": "string",
+      "enum": ["dread", "tension", "silence", "violence", "mystery", "relief", "night_insects", "wind", "neutral"]
+    },
     "segments": {
       "type": "array",
       "description": "Narration segments in order.",
@@ -23,7 +27,7 @@
           "text_secondary": { "type": "string", "minLength": 1 },
           "pacing_ms": {
             "type": "integer",
-            "minimum": 500,
+            "minimum": 400,
             "description": "Target duration for this segment in milliseconds."
           },
           "emotion_hint": {
@@ -46,7 +50,7 @@
           "character": { "type": "string" },
           "text_en":        { "type": "string", "minLength": 1 },
           "text_secondary": { "type": "string", "minLength": 1 },
-          "pacing_ms": { "type": "integer", "minimum": 500 },
+          "pacing_ms": { "type": "integer", "minimum": 400 },
           "emotion_hint": {
             "type": "string",
             "enum": ["neutral", "fearful", "intense", "whispered", "urgent"]

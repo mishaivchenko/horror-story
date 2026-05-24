@@ -56,7 +56,7 @@ class MockImageAdapter(ImageAdapter):
             "height": height,
             "seed": seed,
             "adapter": "mock",
-            "output_path": str(out_path.relative_to(Path.cwd()) if out_path.is_absolute() and out_path.is_relative_to(Path.cwd()) else out_path),
+            "output_path": out_path.name,
             "status": "generated",
             "error": None,
         }

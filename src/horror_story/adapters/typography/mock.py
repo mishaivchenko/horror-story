@@ -251,7 +251,7 @@ class MockTypographyAdapter(TypographyAdapter):
             "fps": fps,
             "seed": seed,
             "adapter": "mock",
-            "output_path": _rel(out_path),
+            "output_path": out_path.name,
             "status": "generated",
             "error": None,
         }

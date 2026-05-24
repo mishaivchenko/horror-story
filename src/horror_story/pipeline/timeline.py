@@ -23,12 +23,24 @@ Timing rules
 from __future__ import annotations
 
 import json
+import os
 from pathlib import Path
 from typing import Any
 
 
 def _pacing_s(pacing_ms: int) -> float:
     return pacing_ms / 1000.0
+
+
+def _sidecar_source_path(sidecar_path: Path, output_path: str, timeline_out_path: Path) -> str:
+    """Return output_path expressed relative to the timeline's output directory.
+
+    Sidecar output_path values are filename-only (e.g. 'motion_scene-01.mp4').
+    The actual file lives next to its sidecar.  The timeline is written to a
+    different directory (video/), so we compute the relative path from there.
+    """
+    absolute = sidecar_path.parent / output_path
+    return os.path.relpath(absolute, timeline_out_path.parent)
 
 
 def _build_audio_sequence(
@@ -77,12 +89,15 @@ def _build_audio_sequence(
     return result
 
 
-def _index_voice_lines(voice_line_sidecar_paths: list[Path]) -> dict[str, str]:
-    """Return {line_ref: output_path} from a list of voice-line sidecar files."""
+def _index_voice_lines(
+    voice_line_sidecar_paths: list[Path],
+    timeline_out_path: Path,
+) -> dict[str, str]:
+    """Return {line_ref: source_path} where source_path is relative to the timeline directory."""
     index: dict[str, str] = {}
     for p in voice_line_sidecar_paths:
         data = json.loads(p.read_text())
-        index[str(data["line_ref"])] = str(data["output_path"])
+        index[str(data["line_ref"])] = _sidecar_source_path(p, str(data["output_path"]), timeline_out_path)
     return index
 
 
@@ -136,7 +151,7 @@ def plan_timeline(
     motion_duration_s: float = float(motion_sidecar["duration_s"])
     ambient_duration_s: float = float(ambient_sidecar["duration_s"])
 
-    voice_line_index = _index_voice_lines(voice_line_sidecar_paths)
+    voice_line_index = _index_voice_lines(voice_line_sidecar_paths, out_path)
 
     # Build ordered audio sequence
     audio_sequence = _build_audio_sequence(script)
@@ -167,7 +182,7 @@ def plan_timeline(
     audio_tracks.append({
         "track_id": "audio-ambient",
         "track_type": "ambient",
-        "source_path": ambient_sidecar["output_path"],
+        "source_path": _sidecar_source_path(ambient_sidecar_path, str(ambient_sidecar["output_path"]), out_path),
         "start_s": 0.0,
         "end_s": round(scene_duration_s, 6),
         "line_ref": "ambient",
@@ -175,14 +190,14 @@ def plan_timeline(
 
     video_tracks = [{
         "track_id": "video-motion",
-        "source_path": motion_sidecar["output_path"],
+        "source_path": _sidecar_source_path(motion_sidecar_path, str(motion_sidecar["output_path"]), out_path),
         "start_s": 0.0,
         "end_s": round(scene_duration_s, 6),
     }]
 
     overlay_tracks = [{
         "track_id": "overlay-typography",
-        "source_path": typography_sidecar["output_path"],
+        "source_path": _sidecar_source_path(typography_sidecar_path, str(typography_sidecar["output_path"]), out_path),
         "start_s": 0.0,
         "end_s": round(scene_duration_s, 6),
     }]

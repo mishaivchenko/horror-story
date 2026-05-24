@@ -71,11 +71,6 @@ class MockMotionAdapter(MotionAdapter):
             if frame_path.is_absolute() and frame_path.is_relative_to(Path.cwd())
             else frame_path
         )
-        rel_out = str(
-            out_path.relative_to(Path.cwd())
-            if out_path.is_absolute() and out_path.is_relative_to(Path.cwd())
-            else out_path
-        )
         sidecar: dict[str, object] = {
             "schema_version": "1.0",
             "story_id": story_id or "unknown",
@@ -86,7 +81,7 @@ class MockMotionAdapter(MotionAdapter):
             "effect": effect,
             "seed": seed,
             "adapter": "mock",
-            "output_path": rel_out,
+            "output_path": out_path.name,
             "status": "generated",
             "error": None,
         }

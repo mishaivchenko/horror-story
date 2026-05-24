@@ -251,7 +251,7 @@ def test_mock_tts_invalid_pacing_raises(tmp_path: Path) -> None:
             text="Some text.",
             voice_id="en-narrator-01",
             language="en",
-            pacing_ms=499,
+            pacing_ms=399,
             seed=0,
             out_path=out,
         )

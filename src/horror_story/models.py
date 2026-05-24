@@ -124,6 +124,7 @@ class DialogueLine:
 class Script:
     story_id: str
     scene_id: str
+    mood: str
     segments: list[Segment] = field(default_factory=list)
     dialogue_lines: list[DialogueLine] = field(default_factory=list)
 
@@ -138,6 +139,7 @@ class Script:
             "schema_version": "1.0",
             "story_id": self.story_id,
             "scene_id": self.scene_id,
+            "mood": self.mood,
             "segments": [s.to_dict() for s in self.segments],
             "dialogue_lines": [d.to_dict() for d in self.dialogue_lines],
             "total_duration_ms": self.total_duration_ms,

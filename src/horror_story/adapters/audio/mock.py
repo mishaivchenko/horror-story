@@ -53,7 +53,7 @@ class MockAudioAdapter(AudioAdapter):
             "duration_s": duration_s,
             "seed": seed,
             "adapter": "mock",
-            "output_path": str(out_path),
+            "output_path": out_path.name,
             "actual_duration_s": actual_duration_s,
             "status": "generated",
             "error": None,

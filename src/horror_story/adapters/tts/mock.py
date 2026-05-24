@@ -34,8 +34,8 @@ class MockTTSAdapter(TTSAdapter):
     ) -> Path:
         if not text:
             raise ValueError("text must not be empty")
-        if pacing_ms < 500:
-            raise ValueError("pacing_ms must be >= 500 (schema minimum)")
+        if pacing_ms < 400:
+            raise ValueError("pacing_ms must be >= 400 (schema minimum)")
         if seed < 0:
             raise ValueError("seed must be >= 0 (schema minimum)")
         if line_type not in ("narration", "dialogue"):
@@ -67,7 +67,7 @@ class MockTTSAdapter(TTSAdapter):
             "seed": seed,
             "pacing_ms": pacing_ms,
             "adapter": "mock",
-            "output_path": str(out_path),
+            "output_path": out_path.name,
             "actual_duration_ms": actual_duration_ms,
             "status": "synthesized",
             "error": None,
