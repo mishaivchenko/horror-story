@@ -1,18 +1,7 @@
 from abc import ABC, abstractmethod
 from pathlib import Path
 
-
-class TTSAdapter(ABC):
-    @abstractmethod
-    def synthesize(
-        self,
-        text: str,
-        voice_id: str,
-        language: str,
-        pacing_ms: int,
-        seed: int,
-        out_path: Path,
-    ) -> Path: ...
+from horror_story.adapters.tts.base import TTSAdapter
 
 
 class ImageAdapter(ABC):
@@ -63,3 +52,12 @@ class TypographyAdapter(ABC):
         seed: int,
         out_path: Path,
     ) -> Path: ...
+
+
+__all__ = [
+    "TTSAdapter",
+    "ImageAdapter",
+    "MotionAdapter",
+    "AudioAdapter",
+    "TypographyAdapter",
+]
