@@ -2,6 +2,9 @@
 from __future__ import annotations
 
 import json
+import os
+import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -155,7 +158,7 @@ def test_mock_typography_png_has_transparency(tmp_path: Path) -> None:
 
 
 def test_mock_typography_text_visible(tmp_path: Path) -> None:
-    """At least one opaque white pixel in the upper region (EN text area)."""
+    """At least one opaque white pixel somewhere in the image (adaptive-zones layout)."""
     adapter = MockTypographyAdapter()
     script_path = _write_script(tmp_path, _SCRIPT_MINIMAL)
     out = tmp_path / "overlay.png"
@@ -169,14 +172,13 @@ def test_mock_typography_text_visible(tmp_path: Path) -> None:
         out_path=out,
     )
     with Image.open(out) as img:
-        upper_third = img.crop((0, 0, 640, 160))
-        pixels = list(upper_third.getdata())
+        pixels = list(img.getdata())
         white_pixels = [p for p in pixels if p[0] >= 200 and p[3] == 255]
-        assert len(white_pixels) > 0, "EN text should render white pixels in upper region"
+        assert len(white_pixels) > 0, "EN text should render white pixels"
 
 
 def test_mock_typography_secondary_text_visible(tmp_path: Path) -> None:
-    """Secondary language text renders some non-transparent pixels below EN text."""
+    """Secondary language text renders some non-transparent pixels."""
     adapter = MockTypographyAdapter()
     script_path = _write_script(tmp_path, _SCRIPT_MINIMAL)
     out = tmp_path / "overlay.png"
@@ -190,9 +192,7 @@ def test_mock_typography_secondary_text_visible(tmp_path: Path) -> None:
         out_path=out,
     )
     with Image.open(out) as img:
-        # Lower half of the top region; secondary text should appear here
-        mid_region = img.crop((0, 30, 640, 300))
-        pixels = list(mid_region.getdata())
+        pixels = list(img.getdata())
         opaque_pixels = [p for p in pixels if p[3] > 0]
         assert len(opaque_pixels) > 0, "Secondary text area must have visible pixels"
 
@@ -453,3 +453,132 @@ def test_adapter_factory_get_typography_mock() -> None:
 def test_adapter_factory_get_typography_unknown() -> None:
     with pytest.raises(ValueError, match="unknown typography adapter"):
         AdapterFactory.get_typography("real-provider")
+
+
+# ---------------------------------------------------------------------------
+# Adaptive zones v1 — new layout contract
+# ---------------------------------------------------------------------------
+
+
+def _count_opaque(img: Image.Image) -> int:
+    return sum(1 for p in img.getdata() if p[3] > 0)  # type: ignore[union-attr]
+
+
+def test_text_boxes_not_full_frame_coverage(tmp_path: Path) -> None:
+    """Opaque/text pixels must not cover the majority of the frame."""
+    adapter = MockTypographyAdapter()
+    script_path = _write_script(tmp_path, _SCRIPT_MINIMAL)
+    out = tmp_path / "overlay.png"
+    adapter.render(
+        script_path=script_path,
+        duration_s=2.0,
+        width=320,
+        height=240,
+        fps=24,
+        seed=42,
+        out_path=out,
+    )
+    with Image.open(out) as img:
+        total_pixels = 320 * 240
+        opaque = _count_opaque(img)
+        fraction = opaque / total_pixels
+        assert fraction < 0.5, (
+            f"Opaque pixels cover {fraction:.1%} of frame — must be < 50%"
+        )
+
+
+def test_two_zone_layout_when_dialogue_present(tmp_path: Path) -> None:
+    """With dialogue, opaque pixels must appear in two distinct vertical bands."""
+    adapter = MockTypographyAdapter()
+    script_path = _write_script(tmp_path, _SCRIPT_WITH_DIALOGUE)
+    out = tmp_path / "overlay_dlg.png"
+    adapter.render(
+        script_path=script_path,
+        duration_s=2.5,
+        width=640,
+        height=480,
+        fps=24,
+        seed=10,
+        out_path=out,
+    )
+    with Image.open(out) as img:
+        # Split into top half and bottom half; both should have opaque pixels.
+        top_half = img.crop((0, 0, 640, 240))
+        bottom_half = img.crop((0, 240, 640, 480))
+        assert _count_opaque(top_half) > 0, "Top zone must have opaque pixels"
+        assert _count_opaque(bottom_half) > 0, "Bottom zone must have opaque pixels"
+
+
+def test_layout_deterministic_pixels(tmp_path: Path) -> None:
+    """Same inputs → byte-identical PNG (layout is deterministic)."""
+    adapter = MockTypographyAdapter()
+    script_path = _write_script(tmp_path, _SCRIPT_MINIMAL)
+    out1 = tmp_path / "det1.png"
+    out2 = tmp_path / "det2.png"
+    kwargs = dict(
+        script_path=script_path,
+        duration_s=2.0,
+        width=320,
+        height=240,
+        fps=24,
+        seed=77,
+    )
+    adapter.render(**kwargs, out_path=out1)  # type: ignore[arg-type]
+    adapter.render(**kwargs, out_path=out2)  # type: ignore[arg-type]
+    assert out1.read_bytes() == out2.read_bytes()
+
+
+def test_zone_choice_stable_across_python_hash_seeds() -> None:
+    """Layout must not depend on Python's salted process-local hash()."""
+    script = (
+        "from horror_story.adapters.typography.mock import _pick_zones; "
+        "z=_pick_zones('scene-02', 10, True, 640, 480)[1]; "
+        "print((z.x0, z.y0, z.x1, z.y1))"
+    )
+    outputs: set[str] = set()
+    for hash_seed in ("0", "1", "2", "3"):
+        env = dict(os.environ)
+        env["PYTHONHASHSEED"] = hash_seed
+        proc = subprocess.run(
+            [sys.executable, "-c", script],
+            check=True,
+            capture_output=True,
+            text=True,
+            env=env,
+        )
+        outputs.add(proc.stdout.strip())
+
+    assert len(outputs) == 1
+
+
+def test_no_zone_overlap(tmp_path: Path) -> None:
+    """Zones must not overlap: no pixel column/row claimed by both boxes."""
+    from horror_story.adapters.typography.mock import _pick_zones
+
+    zones = _pick_zones("scene-02", 10, True, 640, 480)
+    assert len(zones) == 2
+    z1, z2 = zones
+    # Rectangles (x0,y0,x1,y1) must not intersect.
+    x_overlap = z1[2] > z2[0] and z2[2] > z1[0]
+    y_overlap = z1[3] > z2[1] and z2[3] > z1[1]
+    assert not (x_overlap and y_overlap), "Zone rectangles must not overlap"
+
+
+def test_single_zone_no_dialogue(tmp_path: Path) -> None:
+    """Script without dialogue renders exactly one zone."""
+    from horror_story.adapters.typography.mock import _pick_zones
+
+    zones = _pick_zones("scene-01", 42, False, 640, 480)
+    assert len(zones) == 1
+
+
+def test_zones_respect_frame_bounds(tmp_path: Path) -> None:
+    """Every zone must fit within the frame dimensions."""
+    from horror_story.adapters.typography.mock import _pick_zones
+
+    for has_dlg in (True, False):
+        zones = _pick_zones("scene-01", 42, has_dlg, 320, 240)
+        for x0, y0, x1, y1 in zones:
+            assert x0 >= 0 and y0 >= 0
+            assert x1 <= 320 and y1 <= 240
+            assert x1 > x0 and y1 > y0
