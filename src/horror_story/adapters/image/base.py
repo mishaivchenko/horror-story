@@ -13,4 +13,7 @@ class ImageAdapter(ABC):
         height: int,
         seed: int,
         out_path: Path,
+        *,
+        story_id: str = "",
+        scene_id: str = "",
     ) -> Path: ...

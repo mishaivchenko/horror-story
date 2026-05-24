@@ -14,4 +14,7 @@ class MotionAdapter(ABC):
         effect: str,
         seed: int,
         out_path: Path,
+        *,
+        story_id: str = "",
+        scene_id: str = "",
     ) -> Path: ...

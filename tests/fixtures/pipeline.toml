@@ -1,0 +1,25 @@
+[story]
+id = "mini-story"
+title = "Mini Story"
+primary_language = "en"
+secondary_language = "uk"
+seed = 42
+
+[render]
+width = 320
+height = 240
+fps = 24
+codec = "libx264"
+audio_codec = "aac"
+
+[voices]
+narrator = "en-narrator-01"
+branner = "en-male-deep"
+griswell = "en-male-mid"
+
+[adapters]
+tts = "mock"
+image = "mock"
+motion = "mock"
+audio = "mock"
+typography = "mock"

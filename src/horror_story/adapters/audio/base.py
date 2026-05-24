@@ -12,4 +12,7 @@ class AudioAdapter(ABC):
         duration_s: float,
         seed: int,
         out_path: Path,
+        *,
+        story_id: str = "",
+        scene_id: str = "",
     ) -> Path: ...
