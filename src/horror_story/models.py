@@ -1,7 +1,8 @@
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, field
+from typing import Optional
 
 
 _STOP_WORDS = frozenset(
@@ -76,4 +77,68 @@ class Scene:
             "visual_description": self.visual_description,
             "mood": self.mood,
             "word_count": self.word_count,
+        }
+
+
+@dataclass(frozen=True)
+class Segment:
+    segment_id: str
+    text_en: str
+    text_secondary: str
+    pacing_ms: int
+    voice_id: str
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "segment_id": self.segment_id,
+            "text_en": self.text_en,
+            "text_secondary": self.text_secondary,
+            "pacing_ms": self.pacing_ms,
+            "voice_id": self.voice_id,
+        }
+
+
+@dataclass(frozen=True)
+class DialogueLine:
+    line_id: str
+    character: str
+    text_en: str
+    text_secondary: str
+    pacing_ms: int
+    voice_id: str
+    insert_after_segment: Optional[str]
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "line_id": self.line_id,
+            "character": self.character,
+            "text_en": self.text_en,
+            "text_secondary": self.text_secondary,
+            "pacing_ms": self.pacing_ms,
+            "voice_id": self.voice_id,
+            "insert_after_segment": self.insert_after_segment,
+        }
+
+
+@dataclass(frozen=True)
+class Script:
+    story_id: str
+    scene_id: str
+    segments: list[Segment] = field(default_factory=list)
+    dialogue_lines: list[DialogueLine] = field(default_factory=list)
+
+    @property
+    def total_duration_ms(self) -> int:
+        return sum(s.pacing_ms for s in self.segments) + sum(
+            d.pacing_ms for d in self.dialogue_lines
+        )
+
+    def to_dict(self) -> dict[str, object]:
+        return {
+            "schema_version": "1.0",
+            "story_id": self.story_id,
+            "scene_id": self.scene_id,
+            "segments": [s.to_dict() for s in self.segments],
+            "dialogue_lines": [d.to_dict() for d in self.dialogue_lines],
+            "total_duration_ms": self.total_duration_ms,
         }
