@@ -129,19 +129,43 @@ onto the motion video frames at Stage 8.
 
 ---
 
+## Stage 7.5: Timeline planner
+
+**Module:** `horror_story.pipeline.timeline`
+**Input:** `scripts/script_<id>.json`, motion sidecar, ambient sidecar, typography sidecar,
+           all voice-line sidecars for the scene (`audio/narration_<scene_id>_<seg>.json`,
+           `audio/dialogue_<scene_id>_<line>.json`)
+**Output:** `video/timeline_<scene_id>.json`
+
+Pure function — no FFmpeg, no media generation. Reads sidecar metadata only.
+
+Timing rules:
+- Narration segments play sequentially in script order, starting at 0.0 s.
+- Dialogue lines are inserted immediately after the segment named by
+  `insert_after_segment`. If that field is `null` or references a missing
+  segment, the line is appended after all other tracks (fallback).
+- Multiple dialogue lines sharing the same `insert_after_segment` are ordered
+  by `line_id` (deterministic).
+- Ambient audio: `start_s = 0.0`, `end_s = scene_duration_s`.
+- Motion video: `start_s = 0.0`, `end_s = scene_duration_s`.
+- Typography overlay: `start_s = 0.0`, `end_s = scene_duration_s`.
+- `scene_duration_s = max(motion_duration_s, audio_timeline_end_s, ambient_duration_s)`.
+
+See `spec/schemas/timeline.schema.json`.
+
+---
+
 ## Stage 8: Scene compositor
 
 **Module:** `horror_story.pipeline.compositor`
-**Input:** `frames/motion_<scene_id>.mp4`, all audio WAVs, `video/typography_<scene_id>.png`
+**Input:** `video/timeline_<scene_id>.json` + all referenced media artifacts
 **Output:** `video/scene_<scene_id>_composed.mp4`
 
-FFmpeg pipeline:
+FFmpeg pipeline driven by the Stage 7.5 timeline artifact:
 1. Alpha-composite the typography PNG overlay onto the motion video (`overlay` filter).
-2. Mix narration + dialogue + ambient into single stereo audio track (`amix`).
+2. Mix narration + dialogue + ambient into single stereo audio track (`amix`),
+   using the absolute `start_s` offsets from the timeline.
 3. Mux video + audio into output MP4.
-
-All timing is driven by `pacing_ms` from the script. Narration and ambient play
-simultaneously; dialogue is interleaved with narration gaps.
 
 ---
 
@@ -166,7 +190,8 @@ manifest  ──► parse  ──► script  ──► [tts-narration, tts-dialo
                                   ──► image  ──► motion
                                   ──► audio
                                   ──► typography
-                 compositor (waits for: motion, tts-*, audio, typography)
+                 timeline-planner (waits for: script, tts-* sidecars, motion, audio, typography sidecars)
+                 compositor (waits for: timeline, all media artifacts)
                  renderer (waits for: all composited scenes)
 ```
 

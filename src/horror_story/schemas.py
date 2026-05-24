@@ -21,6 +21,7 @@ _SCHEMA_FILES = [
     "composed_scene.schema.json",
     "artifact_index.schema.json",
     "render_job.schema.json",
+    "timeline.schema.json",
 ]
 
 

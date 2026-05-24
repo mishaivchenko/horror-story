@@ -1,0 +1,79 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "horror-story/timeline",
+  "title": "Scene Timeline",
+  "description": "Deterministic timing plan for the scene compositor. Maps every media artifact to absolute start/end positions in seconds. Produced by the timeline planner before compositing; no FFmpeg required.",
+  "type": "object",
+  "required": ["schema_version", "story_id", "scene_id", "duration_s", "fps", "video_tracks", "audio_tracks", "overlay_tracks"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": { "type": "string", "const": "1.0" },
+    "story_id": { "type": "string" },
+    "scene_id": { "type": "string" },
+    "duration_s": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Scene duration in seconds: max(motion_duration_s, audio_timeline_end_s, ambient_duration_s)."
+    },
+    "fps": { "type": "integer", "minimum": 1 },
+    "sources": {
+      "type": "object",
+      "description": "Paths to the sidecar artifacts consumed when building this timeline.",
+      "additionalProperties": false,
+      "properties": {
+        "script":               { "type": "string" },
+        "motion_sidecar":       { "type": "string" },
+        "ambient_sidecar":      { "type": "string" },
+        "typography_sidecar":   { "type": "string" },
+        "voice_line_sidecars": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Paths to all voice-line sidecar JSONs consumed (narration + dialogue)."
+        }
+      }
+    },
+    "video_tracks": {
+      "type": "array",
+      "description": "Video source tracks. For MVP this is a single motion MP4 spanning the full scene.",
+      "items": { "$ref": "#/$defs/timed_track" }
+    },
+    "audio_tracks": {
+      "type": "array",
+      "description": "Audio source tracks in deterministic playback order. Sequential narration/dialogue entries are followed by the ambient entry (which spans the full scene).",
+      "items": {
+        "type": "object",
+        "required": ["track_id", "track_type", "source_path", "start_s", "end_s"],
+        "additionalProperties": false,
+        "properties": {
+          "track_id":    { "type": "string" },
+          "track_type":  { "type": "string", "enum": ["narration", "dialogue", "ambient"] },
+          "source_path": { "type": "string" },
+          "start_s":     { "type": "number", "minimum": 0 },
+          "end_s":       { "type": "number", "minimum": 0 },
+          "line_ref": {
+            "type": "string",
+            "description": "segment_id or line_id from the script, or 'ambient' for the ambient track."
+          }
+        }
+      }
+    },
+    "overlay_tracks": {
+      "type": "array",
+      "description": "Overlay (PNG) tracks in compositing order. For MVP this is a single typography PNG spanning the full scene.",
+      "items": { "$ref": "#/$defs/timed_track" }
+    }
+  },
+  "$defs": {
+    "timed_track": {
+      "type": "object",
+      "required": ["track_id", "source_path", "start_s", "end_s"],
+      "additionalProperties": false,
+      "properties": {
+        "track_id":    { "type": "string" },
+        "source_path": { "type": "string" },
+        "start_s":     { "type": "number", "minimum": 0 },
+        "end_s":       { "type": "number", "minimum": 0 }
+      }
+    }
+  }
+}
