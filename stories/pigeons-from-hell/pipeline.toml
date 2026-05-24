@@ -1,0 +1,25 @@
+[story]
+id = "pigeons-from-hell"
+title = "Pigeons from Hell"
+primary_language = "en"
+secondary_language = "uk"
+seed = 42
+
+[render]
+width = 1920
+height = 1080
+fps = 24
+codec = "libx264"
+audio_codec = "aac"
+
+[adapters]
+tts = "kokoro"
+image = "mock"
+motion = "mock"
+audio = "mock"
+typography = "mock"
+
+[voices]
+narrator = "narrator_en"
+branner = "narrator_en"
+griswell = "narrator_en"
