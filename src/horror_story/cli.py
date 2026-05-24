@@ -555,13 +555,18 @@ _GLOB_SCHEMA: list[tuple[str, str]] = [
     ("frames/motion_*.json",         "motion_artifact.schema.json"),
     ("video/typography_*.json",      "typography_artifact.schema.json"),
     ("video/timeline_*.json",        "timeline.schema.json"),
-    ("video/scene_*_composed.json",  "composed_scene.schema.json"),
+    ("video/scene_*_composed.json",   "composed_scene.schema.json"),
+    ("video/scene_*_composed_r*.json", "composed_scene.schema.json"),
 ]
 
 
 def _validate_run_dir(run_dir: Path) -> None:
     import jsonschema
     from horror_story.schemas import validate
+
+    if not run_dir.is_dir():
+        print(f"[validate] run directory not found: {run_dir}", file=sys.stderr)
+        sys.exit(1)
 
     errors: list[str] = []
 

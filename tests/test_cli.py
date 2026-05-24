@@ -513,3 +513,82 @@ def test_artifact_index_final_stores_relative_path_and_sha(
     assert final["sha256"] == expected_sha, (
         f"final.sha256 must be propagated from render_job.json, got: {final['sha256']!r}"
     )
+
+
+# ---------------------------------------------------------------------------
+# P1: initialize_run run_id_override
+# ---------------------------------------------------------------------------
+
+def test_initialize_run_respects_run_id_override(tmp_path: Path) -> None:
+    """initialize_run must accept run_id_override and use it as the run directory name."""
+    from horror_story.manifest import initialize_run
+    from horror_story.config import (
+        PipelineConfig, StoryConfig, RenderConfig, AdapterConfig,
+    )
+
+    config = PipelineConfig(
+        story=StoryConfig(
+            id="test-story",
+            title="Test",
+            primary_language="en",
+            secondary_language="uk",
+            seed=42,
+        ),
+        render=RenderConfig(
+            width=320, height=240, fps=24, codec="libx264", audio_codec="aac",
+        ),
+        adapters=AdapterConfig(
+            tts="mock", image="mock", motion="mock", audio="mock", typography="mock",
+        ),
+    )
+
+    story_text = "The darkness crept through the empty hall. Fear gripped the lone traveler."
+    out_dir = tmp_path / "out"
+
+    manifest, _, scenes = initialize_run(
+        config, story_text, "story.txt", out_dir, run_id_override="run_test-story_99"
+    )
+
+    assert (out_dir / "run_test-story_99").exists(), (
+        "run directory must use run_id_override"
+    )
+    assert (out_dir / "run_test-story_99" / "manifest.json").exists()
+
+
+# ---------------------------------------------------------------------------
+# P2: validate versioned composed sidecars
+# ---------------------------------------------------------------------------
+
+def test_validate_run_dir_checks_versioned_composed_sidecars(
+    tmp_path: Path,
+) -> None:
+    """_validate_run_dir must validate video/scene_*_composed_r*.json sidecars."""
+    import json as _json
+    from horror_story.cli import _validate_run_dir
+
+    run_dir = tmp_path / "run_test_42"
+    run_dir.mkdir()
+    (run_dir / "video").mkdir()
+
+    # Write a corrupt versioned composed sidecar (missing required fields).
+    bad_sidecar = run_dir / "video" / "scene_s01_composed_r1.json"
+    bad_sidecar.write_text(_json.dumps({"schema_version": "1.0"}))
+
+    with pytest.raises(SystemExit) as exc_info:
+        _validate_run_dir(run_dir)
+    assert exc_info.value.code == 1
+
+
+# ---------------------------------------------------------------------------
+# P2: validate rejects missing run directory
+# ---------------------------------------------------------------------------
+
+def test_validate_run_dir_rejects_nonexistent_directory(
+    tmp_path: Path,
+) -> None:
+    """_validate_run_dir must exit non-zero when run_dir does not exist."""
+    from horror_story.cli import _validate_run_dir
+
+    with pytest.raises(SystemExit) as exc_info:
+        _validate_run_dir(tmp_path / "no-such-run")
+    assert exc_info.value.code == 1

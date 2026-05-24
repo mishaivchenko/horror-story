@@ -150,6 +150,8 @@ def initialize_run(
     story_text: str,
     story_filename: str,
     out_dir: Path,
+    *,
+    run_id_override: str | None = None,
 ) -> tuple[Manifest, ArtifactIndex, list[Scene]]:
     """Stage 0+1: parse story, write scene JSONs, manifest, and artifact_index."""
     from horror_story.pipeline.parse import parse_story
@@ -157,7 +159,7 @@ def initialize_run(
 
     scenes = parse_story(story_text, config.story.id)
 
-    run_id = f"run_{config.story.id}_{config.story.seed}"
+    run_id = run_id_override if run_id_override is not None else f"run_{config.story.id}_{config.story.seed}"
     run_dir = out_dir / run_id
     scenes_dir = run_dir / "scenes"
     scenes_dir.mkdir(parents=True, exist_ok=True)
