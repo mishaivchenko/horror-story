@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "horror-story/manifest",
+  "title": "Pipeline Manifest",
+  "description": "Top-level pipeline manifest written once (during Stage 0+1) and never mutated.",
+  "type": "object",
+  "required": ["schema_version", "story_id", "title", "seed", "languages", "render", "voices", "adapters", "scenes"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": { "type": "string", "const": "1.0" },
+    "story_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9-]+$",
+      "description": "Stable kebab-case identifier for the story."
+    },
+    "title": { "type": "string" },
+    "author": { "type": "string" },
+    "source_file": {
+      "type": "string",
+      "description": "Basename of the story text file."
+    },
+    "seed": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Master seed for deterministic output. Part of the run directory name."
+    },
+    "languages": {
+      "type": "object",
+      "required": ["primary", "secondary"],
+      "properties": {
+        "primary":   { "type": "string", "pattern": "^[a-z]{2}$" },
+        "secondary": { "type": "string", "pattern": "^[a-z]{2}$" }
+      },
+      "additionalProperties": false
+    },
+    "render": {
+      "type": "object",
+      "required": ["width", "height", "fps", "codec", "audio_codec"],
+      "properties": {
+        "width":       { "type": "integer", "minimum": 320 },
+        "height":      { "type": "integer", "minimum": 240 },
+        "fps":         { "type": "integer", "minimum": 1 },
+        "codec":       { "type": "string" },
+        "audio_codec": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "voices": {
+      "type": "object",
+      "description": "Map of character name → voice_id. 'narrator' is required.",
+      "required": ["narrator"],
+      "properties": {
+        "narrator": { "type": "string" }
+      },
+      "additionalProperties": { "type": "string" }
+    },
+    "adapters": {
+      "type": "object",
+      "required": ["tts", "image", "motion", "audio", "typography"],
+      "properties": {
+        "tts":        { "type": "string" },
+        "image":      { "type": "string" },
+        "motion":     { "type": "string" },
+        "audio":      { "type": "string" },
+        "typography": { "type": "string" }
+      },
+      "additionalProperties": false,
+      "description": "Adapter names. All must be 'mock' for MVP."
+    },
+    "scenes": {
+      "type": "array",
+      "items": { "type": "string" },
+      "minItems": 1,
+      "description": "Ordered list of scene_ids. Populated by Stage 0+1, then immutable."
+    }
+  }
+}

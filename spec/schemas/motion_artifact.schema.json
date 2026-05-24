@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "horror-story/motion-artifact",
+  "title": "Motion Artifact",
+  "description": "Sidecar record for a generated motion/VFX MP4 file.",
+  "type": "object",
+  "required": ["schema_version", "story_id", "scene_id", "source_keyframe", "duration_s", "fps", "seed", "adapter", "output_path", "status"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": { "type": "string", "const": "1.0" },
+    "story_id":  { "type": "string" },
+    "scene_id":  { "type": "string" },
+    "source_keyframe": {
+      "type": "string",
+      "description": "Relative path to the input keyframe PNG."
+    },
+    "duration_s": { "type": "number", "minimum": 0 },
+    "fps":        { "type": "integer", "minimum": 1 },
+    "effect": {
+      "type": "string",
+      "description": "Effect name (e.g. 'none' for mock, 'parallax', 'zoom')."
+    },
+    "seed":    { "type": "integer", "minimum": 0 },
+    "adapter": { "type": "string" },
+    "output_path": { "type": "string" },
+    "status": {
+      "type": "string",
+      "enum": ["pending", "generated", "failed"]
+    },
+    "error": { "type": ["string", "null"] }
+  }
+}

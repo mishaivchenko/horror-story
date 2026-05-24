@@ -1,0 +1,30 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "horror-story/typography-artifact",
+  "title": "Typography Artifact",
+  "description": "Sidecar record for a generated bilingual text overlay MP4.",
+  "type": "object",
+  "required": ["schema_version", "story_id", "scene_id", "source_script", "duration_s", "width", "height", "fps", "seed", "adapter", "output_path", "status"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": { "type": "string", "const": "1.0" },
+    "story_id":  { "type": "string" },
+    "scene_id":  { "type": "string" },
+    "source_script": {
+      "type": "string",
+      "description": "Relative path to the script JSON used to render text."
+    },
+    "duration_s": { "type": "number", "minimum": 0 },
+    "width":  { "type": "integer", "minimum": 320 },
+    "height": { "type": "integer", "minimum": 240 },
+    "fps":    { "type": "integer", "minimum": 1 },
+    "seed":   { "type": "integer", "minimum": 0 },
+    "adapter":      { "type": "string" },
+    "output_path":  { "type": "string" },
+    "status": {
+      "type": "string",
+      "enum": ["pending", "generated", "failed"]
+    },
+    "error": { "type": ["string", "null"] }
+  }
+}

@@ -1,0 +1,28 @@
+name: Spec lint
+
+on:
+  pull_request:
+    paths:
+      - "spec/**"
+      - "backlog/**"
+      - "docs/**"
+      - "README.md"
+      - "CLAUDE.md"
+
+jobs:
+  markdownlint:
+    name: Lint spec docs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+
+      - name: Install markdownlint-cli
+        run: npm install -g markdownlint-cli
+
+      - name: Lint spec and docs
+        run: markdownlint "spec/**/*.md" "backlog/**/*.md" "docs/**/*.md" "README.md" "CLAUDE.md"

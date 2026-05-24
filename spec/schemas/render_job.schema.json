@@ -1,0 +1,50 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "horror-story/render-job",
+  "title": "Render Job",
+  "description": "Describes the final render job that concatenates all scenes into the output video.",
+  "type": "object",
+  "required": ["schema_version", "story_id", "seed", "scene_ids", "render", "output_path", "status"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": { "type": "string", "const": "1.0" },
+    "story_id": { "type": "string" },
+    "seed": { "type": "integer", "minimum": 0 },
+    "scene_ids": {
+      "type": "array",
+      "items": { "type": "string" },
+      "minItems": 1,
+      "description": "Ordered list of scene_ids concatenated."
+    },
+    "render": {
+      "type": "object",
+      "required": ["width", "height", "fps", "codec", "audio_codec"],
+      "properties": {
+        "width":       { "type": "integer", "minimum": 320 },
+        "height":      { "type": "integer", "minimum": 240 },
+        "fps":         { "type": "integer", "minimum": 1 },
+        "codec":       { "type": "string" },
+        "audio_codec": { "type": "string" }
+      },
+      "additionalProperties": false
+    },
+    "output_path": {
+      "type": "string",
+      "description": "Relative path to the final MP4 from the run root."
+    },
+    "sha256": {
+      "type": ["string", "null"],
+      "pattern": "^[a-f0-9]{64}$",
+      "description": "SHA-256 of the output file content. Null until render completes."
+    },
+    "duration_ms": {
+      "type": ["integer", "null"],
+      "description": "Total duration of the rendered video in milliseconds."
+    },
+    "status": {
+      "type": "string",
+      "enum": ["pending", "rendering", "complete", "failed"]
+    },
+    "error": { "type": ["string", "null"] }
+  }
+}

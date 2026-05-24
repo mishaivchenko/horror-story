@@ -1,0 +1,45 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "horror-story/composed-scene",
+  "title": "Composed Scene",
+  "description": "Sidecar record for a fully composed scene MP4 (video + audio + overlays).",
+  "type": "object",
+  "required": ["schema_version", "story_id", "scene_id", "inputs", "output_path", "status"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": { "type": "string", "const": "1.0" },
+    "story_id": { "type": "string" },
+    "scene_id": { "type": "string" },
+    "inputs": {
+      "type": "object",
+      "description": "Relative paths to all input artifacts consumed by the compositor.",
+      "required": ["motion", "ambient", "typography"],
+      "additionalProperties": false,
+      "properties": {
+        "motion":          { "type": "string" },
+        "ambient":         { "type": "string" },
+        "typography":      { "type": "string" },
+        "narration_wavs":  {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Ordered narration segment WAV paths."
+        },
+        "dialogue_wavs": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Ordered dialogue line WAV paths."
+        }
+      }
+    },
+    "duration_ms": {
+      "type": ["integer", "null"],
+      "description": "Measured duration of the composed output."
+    },
+    "output_path": { "type": "string" },
+    "status": {
+      "type": "string",
+      "enum": ["pending", "composed", "failed"]
+    },
+    "error": { "type": ["string", "null"] }
+  }
+}

@@ -1,0 +1,35 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "horror-story/ambient-artifact",
+  "title": "Ambient Audio Artifact",
+  "description": "Sidecar record for a generated ambient audio WAV file.",
+  "type": "object",
+  "required": ["schema_version", "story_id", "scene_id", "mood", "duration_s", "seed", "adapter", "output_path", "status"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": { "type": "string", "const": "1.0" },
+    "story_id":  { "type": "string" },
+    "scene_id":  { "type": "string" },
+    "mood": {
+      "type": "string",
+      "description": "Mood value from the scene JSON."
+    },
+    "duration_s": {
+      "type": "number",
+      "minimum": 0,
+      "description": "Requested duration in seconds."
+    },
+    "seed":    { "type": "integer", "minimum": 0 },
+    "adapter": { "type": "string" },
+    "output_path": { "type": "string" },
+    "actual_duration_s": {
+      "type": ["number", "null"],
+      "description": "Measured duration after generation."
+    },
+    "status": {
+      "type": "string",
+      "enum": ["pending", "generated", "failed"]
+    },
+    "error": { "type": ["string", "null"] }
+  }
+}

@@ -1,0 +1,51 @@
+name: Spec Task
+description: Implementation task linked to a spec entry
+labels: ["spec-task"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Use this template for any implementation task that has a corresponding spec entry.
+        Fill in all fields. Do not open this issue until the spec entry is Accepted.
+
+  - type: input
+    id: spec_ref
+    attributes:
+      label: Spec reference
+      description: Path to the spec file and section (e.g. spec/MVP_PLUS.md §F-03)
+      placeholder: spec/MVP_PLUS.md §F-XX
+    validations:
+      required: true
+
+  - type: input
+    id: backlog_ref
+    attributes:
+      label: Backlog issue
+      description: File in backlog/issues/ (e.g. backlog/issues/004-tts-adapter.md)
+      placeholder: backlog/issues/XXX-name.md
+    validations:
+      required: true
+
+  - type: textarea
+    id: goal
+    attributes:
+      label: Goal
+      description: One sentence describing what this issue delivers.
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance_criteria
+    attributes:
+      label: Acceptance criteria
+      description: Paste the acceptance criteria checklist from the backlog file.
+      value: |
+        - [ ] ...
+    validations:
+      required: true
+
+  - type: textarea
+    id: notes
+    attributes:
+      label: Notes
+      description: Anything else the implementer needs to know.

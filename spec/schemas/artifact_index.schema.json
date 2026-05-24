@@ -1,0 +1,49 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "horror-story/artifact-index",
+  "title": "Artifact Index",
+  "description": "Mutable registry of the latest artifact paths for a run. Updated by each stage and on --scene re-runs. This is the only file updated (not replaced) after initial creation.",
+  "type": "object",
+  "required": ["schema_version", "story_id", "run_id", "scenes"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": { "type": "string", "const": "1.0" },
+    "story_id": { "type": "string" },
+    "run_id": {
+      "type": "string",
+      "pattern": "^run_[a-z0-9-]+_[0-9]+(_(r[0-9]+))?$",
+      "description": "e.g. run_pigeons-from-hell_42 or run_pigeons-from-hell_42_r1"
+    },
+    "scenes": {
+      "type": "object",
+      "description": "Keyed by scene_id. Each entry tracks latest artifact paths for that scene.",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["scene", "script", "status"],
+        "additionalProperties": false,
+        "properties": {
+          "scene":     { "type": ["string", "null"], "description": "Relative path to scene JSON." },
+          "script":    { "type": ["string", "null"], "description": "Relative path to script JSON." },
+          "keyframe":  { "type": ["string", "null"], "description": "Relative path to keyframe PNG." },
+          "motion":    { "type": ["string", "null"], "description": "Relative path to motion MP4." },
+          "ambient":   { "type": ["string", "null"], "description": "Relative path to ambient WAV." },
+          "typography":{ "type": ["string", "null"], "description": "Relative path to typography MP4." },
+          "composed":  { "type": ["string", "null"], "description": "Relative path to composed scene MP4." },
+          "status": {
+            "type": "string",
+            "enum": ["pending", "partial", "complete", "failed"]
+          }
+        }
+      }
+    },
+    "final": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "path":   { "type": ["string", "null"] },
+        "sha256": { "type": ["string", "null"], "pattern": "^[a-f0-9]{64}$" },
+        "status": { "type": "string", "enum": ["pending", "complete", "failed"] }
+      }
+    }
+  }
+}

@@ -1,0 +1,68 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "horror-story/script",
+  "title": "Scene Script",
+  "description": "Bilingual narration script with dialogue lines for a single scene.",
+  "type": "object",
+  "required": ["schema_version", "story_id", "scene_id", "segments", "dialogue_lines", "total_duration_ms"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": { "type": "string", "const": "1.0" },
+    "story_id": { "type": "string" },
+    "scene_id": { "type": "string" },
+    "segments": {
+      "type": "array",
+      "description": "Narration segments in order.",
+      "items": {
+        "type": "object",
+        "required": ["segment_id", "text_en", "text_secondary", "pacing_ms", "voice_id"],
+        "additionalProperties": false,
+        "properties": {
+          "segment_id": { "type": "string", "pattern": "^seg-[0-9]+$" },
+          "text_en":        { "type": "string", "minLength": 1 },
+          "text_secondary": { "type": "string", "minLength": 1 },
+          "pacing_ms": {
+            "type": "integer",
+            "minimum": 500,
+            "description": "Target duration for this segment in milliseconds."
+          },
+          "emotion_hint": {
+            "type": "string",
+            "enum": ["neutral", "fearful", "intense", "whispered", "urgent"]
+          },
+          "voice_id": { "type": "string" }
+        }
+      }
+    },
+    "dialogue_lines": {
+      "type": "array",
+      "description": "Dialogue lines in order. May be empty.",
+      "items": {
+        "type": "object",
+        "required": ["line_id", "character", "text_en", "text_secondary", "pacing_ms", "voice_id", "insert_after_segment"],
+        "additionalProperties": false,
+        "properties": {
+          "line_id": { "type": "string", "pattern": "^dlg-[0-9]+$" },
+          "character": { "type": "string" },
+          "text_en":        { "type": "string", "minLength": 1 },
+          "text_secondary": { "type": "string", "minLength": 1 },
+          "pacing_ms": { "type": "integer", "minimum": 500 },
+          "emotion_hint": {
+            "type": "string",
+            "enum": ["neutral", "fearful", "intense", "whispered", "urgent"]
+          },
+          "voice_id": { "type": "string" },
+          "insert_after_segment": {
+            "type": ["string", "null"],
+            "description": "segment_id after which this line is inserted. null = before first segment."
+          }
+        }
+      }
+    },
+    "total_duration_ms": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Sum of all segment and dialogue pacing_ms values."
+    }
+  }
+}

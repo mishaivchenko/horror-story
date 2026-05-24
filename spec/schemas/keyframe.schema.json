@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "horror-story/keyframe",
+  "title": "Keyframe Generation Job",
+  "description": "Describes a keyframe image generation request and its output artifact.",
+  "type": "object",
+  "required": ["schema_version", "story_id", "scene_id", "prompt", "width", "height", "seed", "output_path", "status"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": { "type": "string", "const": "1.0" },
+    "story_id": { "type": "string" },
+    "scene_id": { "type": "string" },
+    "prompt": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Image generation prompt derived from scene visual_description."
+    },
+    "negative_prompt": {
+      "type": "string",
+      "description": "Optional negative prompt."
+    },
+    "width": { "type": "integer", "minimum": 320 },
+    "height": { "type": "integer", "minimum": 240 },
+    "seed": { "type": "integer", "minimum": 0 },
+    "adapter": {
+      "type": "string",
+      "description": "Adapter name used to generate this keyframe (e.g. 'mock')."
+    },
+    "output_path": {
+      "type": "string",
+      "description": "Relative path to the generated PNG from the run root."
+    },
+    "status": {
+      "type": "string",
+      "enum": ["pending", "generated", "failed"]
+    },
+    "error": {
+      "type": ["string", "null"],
+      "description": "Error message if status is 'failed'."
+    }
+  }
+}

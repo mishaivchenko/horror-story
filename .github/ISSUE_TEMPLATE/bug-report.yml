@@ -1,0 +1,49 @@
+name: Bug report
+description: A pipeline stage is producing wrong or invalid output
+labels: ["bug"]
+body:
+  - type: input
+    id: stage
+    attributes:
+      label: Pipeline stage
+      description: Which stage is broken? (e.g. parse, script, tts-mock, compositor)
+      placeholder: parse
+    validations:
+      required: true
+
+  - type: input
+    id: scene_id
+    attributes:
+      label: Scene ID (if applicable)
+      placeholder: two-men-who-had-been
+
+  - type: textarea
+    id: command
+    attributes:
+      label: Command run
+      description: Exact CLI invocation that triggers the bug.
+      render: shell
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+      description: Include error output or artifact content if relevant.
+    validations:
+      required: true
+
+  - type: textarea
+    id: artifact
+    attributes:
+      label: Artifact content (if relevant)
+      description: Paste the malformed JSON or file path.
+      render: json

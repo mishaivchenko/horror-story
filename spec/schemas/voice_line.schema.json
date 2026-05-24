@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "horror-story/voice-line",
+  "title": "Voice Line",
+  "description": "A single synthesized audio file for one narration segment or dialogue line.",
+  "type": "object",
+  "required": ["schema_version", "story_id", "scene_id", "line_ref", "line_type", "text", "language", "voice_id", "seed", "pacing_ms", "output_path", "status"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": { "type": "string", "const": "1.0" },
+    "story_id": { "type": "string" },
+    "scene_id": { "type": "string" },
+    "line_ref": {
+      "type": "string",
+      "description": "segment_id or line_id from the script this audio corresponds to."
+    },
+    "line_type": {
+      "type": "string",
+      "enum": ["narration", "dialogue"]
+    },
+    "text": { "type": "string", "minLength": 1 },
+    "language": {
+      "type": "string",
+      "pattern": "^[a-z]{2}$",
+      "description": "BCP-47 two-letter language code."
+    },
+    "voice_id": { "type": "string" },
+    "seed": { "type": "integer", "minimum": 0 },
+    "pacing_ms": { "type": "integer", "minimum": 500 },
+    "adapter": { "type": "string" },
+    "output_path": { "type": "string" },
+    "actual_duration_ms": {
+      "type": ["integer", "null"],
+      "description": "Actual audio duration measured after generation."
+    },
+    "status": {
+      "type": "string",
+      "enum": ["pending", "synthesized", "failed"]
+    },
+    "error": { "type": ["string", "null"] }
+  }
+}

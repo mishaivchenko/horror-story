@@ -1,0 +1,41 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "horror-story/scene",
+  "title": "Scene",
+  "description": "A single scene extracted from the story text.",
+  "type": "object",
+  "required": ["schema_version", "story_id", "scene_id", "index", "text", "visual_description", "mood"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": { "type": "string", "const": "1.0" },
+    "story_id": { "type": "string", "pattern": "^[a-z0-9-]+$" },
+    "scene_id": {
+      "type": "string",
+      "pattern": "^[a-z0-9-]{1,64}$",
+      "description": "Stable kebab-case slug derived from first 8 words of scene text."
+    },
+    "index": {
+      "type": "integer",
+      "minimum": 0,
+      "description": "Zero-based position in the story."
+    },
+    "text": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Full original text of the scene."
+    },
+    "visual_description": {
+      "type": "string",
+      "description": "First 1-2 sentences, stripped of dialogue. Used as image generation prompt."
+    },
+    "mood": {
+      "type": "string",
+      "enum": ["dread", "tension", "silence", "violence", "mystery", "relief", "night_insects", "wind", "neutral"],
+      "description": "Dominant mood for audio and visual tone selection."
+    },
+    "word_count": {
+      "type": "integer",
+      "minimum": 1
+    }
+  }
+}
