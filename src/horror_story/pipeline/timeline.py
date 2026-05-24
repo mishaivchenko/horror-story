@@ -45,14 +45,21 @@ def _sidecar_source_path(sidecar_path: Path, output_path: str, timeline_out_path
 
 def _build_audio_sequence(
     script: dict[str, Any],
+    actual_durations_ms: dict[str, int] | None = None,
 ) -> list[tuple[str, str, float]]:
     """Return ordered list of (line_ref, track_type, duration_s).
 
     Dialogue lines are inserted after their ``insert_after_segment`` if
     valid; otherwise they are appended at the end in line_id order.
+
+    ``actual_durations_ms`` maps line_ref → real audio duration in ms.
+    When provided, that value is used instead of the script's pacing_ms,
+    so real TTS output (which may differ from the heuristic pacing) drives
+    track scheduling.
     """
     segments: list[dict[str, Any]] = script.get("segments", [])
     dialogue_lines: list[dict[str, Any]] = script.get("dialogue_lines", [])
+    overrides = actual_durations_ms or {}
 
     valid_segment_ids = {s["segment_id"] for s in segments}
 
@@ -66,25 +73,19 @@ def _build_audio_sequence(
 
     result: list[tuple[str, str, float]] = []
     for seg in segments:
-        result.append((
-            seg["segment_id"],
-            "narration",
-            _pacing_s(seg["pacing_ms"]),
-        ))
-        for dlg in insert_map.get(seg["segment_id"], []):
-            result.append((
-                dlg["line_id"],
-                "dialogue",
-                _pacing_s(dlg["pacing_ms"]),
-            ))
+        ref = seg["segment_id"]
+        dur = _pacing_s(overrides.get(ref, seg["pacing_ms"]))
+        result.append((ref, "narration", dur))
+        for dlg in insert_map.get(ref, []):
+            dref = dlg["line_id"]
+            ddur = _pacing_s(overrides.get(dref, dlg["pacing_ms"]))
+            result.append((dref, "dialogue", ddur))
 
     # fallback dialogue (invalid / no insert_after_segment)
     for dlg in insert_map.get(None, []):
-        result.append((
-            dlg["line_id"],
-            "dialogue",
-            _pacing_s(dlg["pacing_ms"]),
-        ))
+        dref = dlg["line_id"]
+        ddur = _pacing_s(overrides.get(dref, dlg["pacing_ms"]))
+        result.append((dref, "dialogue", ddur))
 
     return result
 
@@ -92,13 +93,21 @@ def _build_audio_sequence(
 def _index_voice_lines(
     voice_line_sidecar_paths: list[Path],
     timeline_out_path: Path,
-) -> dict[str, str]:
-    """Return {line_ref: source_path} where source_path is relative to the timeline directory."""
-    index: dict[str, str] = {}
+) -> tuple[dict[str, str], dict[str, int]]:
+    """Return ({line_ref: source_path}, {line_ref: duration_ms}).
+
+    duration_ms prefers actual_duration_ms from the sidecar when non-null,
+    falling back to pacing_ms so mock adapters continue to work.
+    """
+    sources: dict[str, str] = {}
+    durations: dict[str, int] = {}
     for p in voice_line_sidecar_paths:
         data = json.loads(p.read_text())
-        index[str(data["line_ref"])] = _sidecar_source_path(p, str(data["output_path"]), timeline_out_path)
-    return index
+        ref = str(data["line_ref"])
+        sources[ref] = _sidecar_source_path(p, str(data["output_path"]), timeline_out_path)
+        actual = data.get("actual_duration_ms")
+        durations[ref] = int(actual) if actual is not None else int(data["pacing_ms"])
+    return sources, durations
 
 
 def plan_timeline(
@@ -151,10 +160,10 @@ def plan_timeline(
     motion_duration_s: float = float(motion_sidecar["duration_s"])
     ambient_duration_s: float = float(ambient_sidecar["duration_s"])
 
-    voice_line_index = _index_voice_lines(voice_line_sidecar_paths, out_path)
+    voice_line_index, actual_durations_ms = _index_voice_lines(voice_line_sidecar_paths, out_path)
 
-    # Build ordered audio sequence
-    audio_sequence = _build_audio_sequence(script)
+    # Build ordered audio sequence using real audio durations when available
+    audio_sequence = _build_audio_sequence(script, actual_durations_ms)
 
     audio_tracks: list[dict[str, Any]] = []
     cursor = 0.0

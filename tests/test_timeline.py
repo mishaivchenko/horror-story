@@ -632,3 +632,110 @@ def test_build_audio_sequence_dialogue_insertion() -> None:
     result = _build_audio_sequence(script)
     refs = [r[0] for r in result]
     assert refs == ["seg-0", "dlg-0", "seg-1"]
+
+
+def test_build_audio_sequence_actual_duration_overrides_pacing() -> None:
+    script: dict[str, Any] = {
+        "segments": [_seg("seg-0", 1000), _seg("seg-1", 1000)],
+        "dialogue_lines": [],
+    }
+    actual = {"seg-0": 2500}
+    result = _build_audio_sequence(script, actual)
+    dur_map = {ref: dur for ref, _, dur in result}
+    assert dur_map["seg-0"] == pytest.approx(2.5)
+    assert dur_map["seg-1"] == pytest.approx(1.0)  # falls back to pacing_ms
+
+
+# ---------------------------------------------------------------------------
+# Timeline uses actual_duration_ms from voice-line sidecars
+# ---------------------------------------------------------------------------
+
+
+def _voice_line_sidecar_with_actual(
+    tmp_path: Path,
+    scene_id: str,
+    line_ref: str,
+    line_type: str,
+    pacing_ms: int,
+    actual_duration_ms: int,
+) -> Path:
+    wav_path = f"audio/{line_type}_{scene_id}_{line_ref}.wav"
+    p = tmp_path / f"vl_{scene_id}_{line_ref}.json"
+    data: dict[str, Any] = {
+        "schema_version": "1.0",
+        "story_id": "test-story",
+        "scene_id": scene_id,
+        "line_ref": line_ref,
+        "line_type": line_type,
+        "text": f"text for {line_ref}",
+        "language": "en",
+        "voice_id": "narrator",
+        "seed": 1,
+        "pacing_ms": pacing_ms,
+        "adapter": "kokoro",
+        "output_path": wav_path,
+        "actual_duration_ms": actual_duration_ms,
+        "status": "synthesized",
+        "error": None,
+    }
+    p.write_text(json.dumps(data))
+    return p
+
+
+def test_timeline_uses_actual_duration_when_longer_than_pacing(tmp_path: Path) -> None:
+    """When actual_duration_ms > pacing_ms, end_s reflects actual audio length."""
+    segs = [_seg("seg-0", 2000), _seg("seg-1", 2000)]
+    s = _script(tmp_path, "sad1", segs)
+    m = _motion_sidecar(tmp_path, "sad1", 10.0)
+    a = _ambient_sidecar(tmp_path, "sad1", 10.0)
+    t = _typography_sidecar(tmp_path, "sad1", 10.0)
+    # seg-0 actual = 3.5 s (longer than pacing 2 s)
+    vl = [
+        _voice_line_sidecar_with_actual(tmp_path, "sad1", "seg-0", "narration", 2000, 3500),
+        _voice_line_sidecar_with_actual(tmp_path, "sad1", "seg-1", "narration", 2000, 2000),
+    ]
+    out = tmp_path / "timeline.json"
+
+    plan_timeline(s, m, a, t, vl, out)
+    data = json.loads(out.read_text())
+
+    by_ref = {tr["line_ref"]: tr for tr in data["audio_tracks"] if tr["track_type"] != "ambient"}
+    assert by_ref["seg-0"]["start_s"] == pytest.approx(0.0)
+    assert by_ref["seg-0"]["end_s"] == pytest.approx(3.5)
+    assert by_ref["seg-1"]["start_s"] == pytest.approx(3.5)
+    assert by_ref["seg-1"]["end_s"] == pytest.approx(5.5)
+
+
+def test_timeline_actual_duration_null_falls_back_to_pacing(tmp_path: Path) -> None:
+    """actual_duration_ms=null in sidecar: fall back to pacing_ms."""
+    segs = [_seg("seg-0", 2000)]
+    s = _script(tmp_path, "sad2", segs)
+    m = _motion_sidecar(tmp_path, "sad2", 5.0)
+    a = _ambient_sidecar(tmp_path, "sad2", 5.0)
+    t = _typography_sidecar(tmp_path, "sad2", 5.0)
+    # Write a sidecar with actual_duration_ms explicitly null
+    p = tmp_path / "vl_sad2_seg-0.json"
+    p.write_text(json.dumps({
+        "schema_version": "1.0",
+        "story_id": "test-story",
+        "scene_id": "sad2",
+        "line_ref": "seg-0",
+        "line_type": "narration",
+        "text": "text",
+        "language": "en",
+        "voice_id": "narrator",
+        "seed": 1,
+        "pacing_ms": 2000,
+        "adapter": "mock",
+        "output_path": "audio/narration_sad2_seg-0.wav",
+        "actual_duration_ms": None,
+        "status": "synthesized",
+        "error": None,
+    }))
+    out = tmp_path / "timeline.json"
+
+    plan_timeline(s, m, a, t, [p], out)
+    data = json.loads(out.read_text())
+
+    by_ref = {tr["line_ref"]: tr for tr in data["audio_tracks"] if tr["track_type"] != "ambient"}
+    assert by_ref["seg-0"]["end_s"] == pytest.approx(2.0)

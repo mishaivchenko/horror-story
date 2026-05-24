@@ -17,6 +17,9 @@ class AdapterFactory:
     def get_tts(name: str) -> TTSAdapter:
         if name == "mock":
             return MockTTSAdapter()
+        elif name == "kokoro":
+            from horror_story.adapters.tts.kokoro import KokoroTTSAdapter
+            return KokoroTTSAdapter()
         raise ValueError(f"unknown TTS adapter: {name!r}")
 
     @staticmethod
