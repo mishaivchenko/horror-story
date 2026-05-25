@@ -468,14 +468,15 @@ def _cmd_run(args: argparse.Namespace) -> None:
 
     # --scene: load existing run, write _r<n> artifacts, update index, re-render
     if args.scene:
-        base_run_dir = _resolve_latest_run(out_dir, base_run_id)
-        if base_run_dir is None:
+        resolved_run_dir = _resolve_latest_run(out_dir, base_run_id)
+        if resolved_run_dir is None:
             print(
                 f"[error] no existing run at {out_dir / base_run_id}. "
                 "Run without --scene first.",
                 file=sys.stderr,
             )
             sys.exit(1)
+        base_run_dir = resolved_run_dir
 
         manifest = Manifest.from_path(base_run_dir / "manifest.json")
         scenes = parse_story(story_text, config.story.id)
