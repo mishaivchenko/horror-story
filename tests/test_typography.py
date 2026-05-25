@@ -711,6 +711,57 @@ def test_single_zone_no_dialogue(tmp_path: Path) -> None:
     assert len(zones) == 1
 
 
+def test_versioned_rerun_produces_versioned_pngs(tmp_path: Path) -> None:
+    """--scene reruns must not overwrite original PNGs.
+
+    When out_timing carries a _r1 suffix the PNGs must also be _r1 variants,
+    leaving the original unversioned PNGs untouched.
+    """
+    adapter = MockTypographyAdapter()
+    scene_id = "scene-01"
+    timeline = _make_minimal_timeline(scene_id, _SCRIPT_MINIMAL["segments"])
+
+    # Original run (no suffix)
+    out_timing_v0 = tmp_path / f"typography_{scene_id}_timing.json"
+    adapter.render(
+        script=_SCRIPT_MINIMAL,
+        timeline=timeline,
+        scene_id=scene_id,
+        seed=42,
+        out_dir=tmp_path,
+        out_timing=out_timing_v0,
+        width=320,
+        height=240,
+    )
+    original_png = tmp_path / f"typography_{scene_id}_seg-0.png"
+    assert original_png.exists()
+    original_mtime = original_png.stat().st_mtime
+
+    # Rerun (suffix _r1)
+    out_timing_r1 = tmp_path / f"typography_{scene_id}_r1_timing.json"
+    adapter.render(
+        script=_SCRIPT_MINIMAL,
+        timeline=timeline,
+        scene_id=scene_id,
+        seed=42,
+        out_dir=tmp_path,
+        out_timing=out_timing_r1,
+        width=320,
+        height=240,
+    )
+
+    # Original PNG must be untouched
+    assert original_png.stat().st_mtime == original_mtime, (
+        "Original typography PNG was overwritten by a rerun"
+    )
+    # Versioned PNG must exist
+    versioned_png = tmp_path / f"typography_{scene_id}_r1_seg-0.png"
+    assert versioned_png.exists(), "_r1 segment PNG was not created"
+    # Timing manifest must reference the versioned PNG
+    timing_data = json.loads(out_timing_r1.read_text())
+    assert timing_data["segments"][0]["png"] == versioned_png.name
+
+
 def test_zones_respect_frame_bounds(tmp_path: Path) -> None:
     """Every zone must fit within the frame dimensions."""
     from horror_story.adapters.typography.mock import _pick_zones

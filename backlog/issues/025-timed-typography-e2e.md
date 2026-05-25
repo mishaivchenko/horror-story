@@ -1,6 +1,6 @@
 # Issue #025 — E2E: verify timed typography on real Kokoro scene
 
-**Status:** Open
+**Status:** Closed
 **Sprint:** 04
 **Priority:** P3 — final verification only
 **Labels:** pipeline, acceptance

@@ -245,7 +245,11 @@ class MockTypographyAdapter(TypographyAdapter):
                 height,
             )
 
-            png_filename = f"typography_{scene_id}_seg-{i}.png"
+            # Derive PNG stem from out_timing so versioned reruns (_r1, _r2, …)
+            # produce versioned PNGs and never overwrite the originals.
+            # out_timing stem: "typography_<scene_id>[_rN]_timing" → strip "_timing"
+            png_stem = out_timing.stem[: -len("_timing")]
+            png_filename = f"{png_stem}_seg-{i}.png"
             png_path = out_dir / png_filename
             tmp_png = png_path.with_suffix(".png.tmp")
             img.save(str(tmp_png), format="PNG")
