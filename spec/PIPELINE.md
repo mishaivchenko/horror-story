@@ -240,7 +240,7 @@ Stage 10: Renderer
 manifest  ──► parse  ──► script  ──► [tts-narration, tts-dialogue]
                                   ──► image  ──► motion
                                   ──► audio
-                 timeline-planner (waits for: script, tts-* sidecars, motion, audio, typography sidecars)
+                 timeline-planner (waits for: script, tts-* sidecars, motion, audio)
                  typography (waits for: script, timeline)
                  compositor (waits for: timeline, typography timing manifest, all media artifacts)
                  renderer (waits for: all composited scenes)
