@@ -120,7 +120,7 @@ WAV: stereo, 44.1 kHz, 16-bit PCM. Duration = scene duration. Mock: silence.
 ## Stage 7: Timeline planner
 
 **Module:** `horror_story.pipeline.timeline`
-**Input:** `scripts/script_<id>.json`, motion sidecar, ambient sidecar, typography sidecar,
+**Input:** `scripts/script_<id>.json`, motion sidecar, ambient sidecar,
            all voice-line sidecars for the scene (`audio/narration_<scene_id>_<seg>.json`,
            `audio/dialogue_<scene_id>_<line>.json`)
 **Output:** `video/timeline_<scene_id>.json`
@@ -136,7 +136,6 @@ Timing rules:
   by `line_id` (deterministic).
 - Ambient audio: `start_s = 0.0`, `end_s = scene_duration_s`.
 - Motion video: `start_s = 0.0`, `end_s = scene_duration_s`.
-- Typography overlay: `start_s = 0.0`, `end_s = scene_duration_s`.
 - `scene_duration_s = max(motion_duration_s, audio_timeline_end_s, ambient_duration_s)`.
 
 **Timeline architectural law:**

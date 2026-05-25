@@ -22,6 +22,7 @@ _SCHEMA_FILES = [
     "artifact_index.schema.json",
     "render_job.schema.json",
     "timeline.schema.json",
+    "typography_timing.schema.json",
 ]
 
 

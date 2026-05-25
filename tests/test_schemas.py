@@ -3,9 +3,9 @@
 from horror_story.schemas import load_all_schemas, validate
 
 
-def test_load_all_schemas_returns_twelve() -> None:
+def test_load_all_schemas_returns_thirteen() -> None:
     schemas = load_all_schemas()
-    assert len(schemas) == 12
+    assert len(schemas) == 13
 
 
 def test_all_schemas_have_type_field() -> None:

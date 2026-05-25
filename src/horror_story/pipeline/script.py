@@ -50,9 +50,12 @@ def _split_at_sentences(text: str) -> list[str]:
         sentence_words = sentence.split()
         if current_words and len(current_words) + len(sentence_words) > _MAX_SEGMENT_WORDS:
             chunks.append(" ".join(current_words))
-            current_words = sentence_words
-        else:
-            current_words.extend(sentence_words)
+            current_words = []
+        # Sentence itself exceeds the limit — split by word count.
+        while len(sentence_words) > _MAX_SEGMENT_WORDS:
+            chunks.append(" ".join(sentence_words[:_MAX_SEGMENT_WORDS]))
+            sentence_words = sentence_words[_MAX_SEGMENT_WORDS:]
+        current_words.extend(sentence_words)
     if current_words:
         chunks.append(" ".join(current_words))
     return chunks
