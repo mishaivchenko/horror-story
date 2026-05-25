@@ -142,20 +142,25 @@ def compose_scene(
 
     filter_parts: list[str] = []
 
-    delayed_labels: list[str] = []
+    stereo_labels: list[str] = []
     for i, (input_idx, start_s) in enumerate(audio_input_indices):
         delay_ms = int(round(start_s * 1000))
-        label = f"[adel{i}]"
-        # stereo inputs need 2-channel delay; mono need 1; all_channels=1 handles both
+        del_label = f"[adel{i}]"
+        ster_label = f"[aster{i}]"
+        # adelay: all_channels=1 handles both mono and stereo inputs uniformly
         filter_parts.append(
-            f"[{input_idx}:a]adelay={delay_ms}|{delay_ms}:all=1{label}"
+            f"[{input_idx}:a]adelay={delay_ms}|{delay_ms}:all=1{del_label}"
         )
-        delayed_labels.append(label)
+        # upmix each (possibly mono) delayed stream to stereo before mixing
+        filter_parts.append(
+            f"{del_label}aformat=channel_layouts=stereo{ster_label}"
+        )
+        stereo_labels.append(ster_label)
 
     # amix: normalise=0 to avoid volume reduction, dropout_transition=0 for clean cutoff
-    delayed_concat = "".join(delayed_labels)
+    stereo_concat = "".join(stereo_labels)
     filter_parts.append(
-        f"{delayed_concat}amix=inputs={n_audio}:normalize=0:dropout_transition=0[amixed]"
+        f"{stereo_concat}amix=inputs={n_audio}:normalize=0:dropout_transition=0[amixed]"
     )
 
     # overlay: alpha-composite typography PNG onto motion video
@@ -172,7 +177,7 @@ def compose_scene(
     # Encoding parameters
     cmd += ["-t", str(duration_s)]
     cmd += ["-c:v", "libx264", "-pix_fmt", "yuv420p"]
-    cmd += ["-c:a", "aac", "-b:a", "192k"]
+    cmd += ["-c:a", "aac", "-b:a", "192k", "-ac", "2"]
     cmd += ["-movflags", "+faststart"]
     cmd += ["-fflags", "+bitexact"]
 

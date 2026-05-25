@@ -81,12 +81,12 @@ def test_generate_script_story_and_scene_ids_match() -> None:
 # Segment requirements
 # ---------------------------------------------------------------------------
 
-def test_segments_max_40_words() -> None:
+def test_segments_max_200_words() -> None:
     for scene in _scenes():
         script = generate_script(scene, _MANIFEST)
         for seg in script.segments:
-            assert len(seg.text_en.split()) <= 40, (
-                f"segment {seg.segment_id} exceeds 40 words in scene {scene.scene_id}"
+            assert len(seg.text_en.split()) <= 200, (
+                f"segment {seg.segment_id} exceeds 200 words in scene {scene.scene_id}"
             )
 
 
@@ -145,6 +145,62 @@ def test_segments_cover_narration_text() -> None:
         script = generate_script(scene, _MANIFEST)
         all_seg_words = " ".join(seg.text_en for seg in script.segments).split()
         assert len(all_seg_words) > 0
+
+
+def test_oversized_paragraph_split_at_sentence_boundary() -> None:
+    """A single paragraph of 250 words must be split at a sentence boundary, not mid-word."""
+    # Build a paragraph with 5 sentences of 50 words each (250 words total).
+    # Each sentence: 49 "word" tokens + "end." as the 50th token.
+    sentence = " ".join(["word"] * 49) + " end."
+    paragraph = " ".join([sentence] * 5)  # 5 x 50 = 250 words
+
+    scene = Scene(
+        story_id=STORY_ID,
+        scene_id="test-long-para",
+        index=0,
+        text=paragraph,
+        visual_description="A long paragraph.",
+        mood="neutral",
+        word_count=250,
+    )
+    script = generate_script(scene, _MANIFEST)
+    # Must produce more than one segment since 250 > 200.
+    assert len(script.segments) > 1
+    # No segment may split mid-sentence: every segment must end with punctuation or be
+    # the continuation where the prior segment ended at a sentence boundary.
+    for seg in script.segments:
+        words = seg.text_en.split()
+        # No segment should exceed 200 words.
+        assert len(words) <= 200, f"segment exceeds 200 words: {len(words)}"
+    # The split must happen at a sentence boundary: the last word of each non-final
+    # segment must end with a period, question mark, or exclamation mark.
+    for seg in script.segments[:-1]:
+        last_word = seg.text_en.rstrip().split()[-1]
+        assert last_word[-1] in ".?!", (
+            f"segment does not end at sentence boundary; last word: {last_word!r}"
+        )
+
+
+def test_two_short_paragraphs_merged_into_one_segment() -> None:
+    """Two short paragraphs (30 + 40 words) must be merged into a single segment."""
+    para1 = " ".join(["shadow"] * 30)
+    para2 = " ".join(["dread"] * 40)
+    text = para1 + "\n\n" + para2
+
+    scene = Scene(
+        story_id=STORY_ID,
+        scene_id="test-merge-paras",
+        index=0,
+        text=text,
+        visual_description="Shadows and dread.",
+        mood="neutral",
+        word_count=70,
+    )
+    script = generate_script(scene, _MANIFEST)
+    assert len(script.segments) == 1, (
+        f"expected 1 merged segment, got {len(script.segments)}"
+    )
+    assert len(script.segments[0].text_en.split()) == 70
 
 
 # ---------------------------------------------------------------------------

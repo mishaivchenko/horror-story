@@ -117,43 +117,7 @@ WAV: stereo, 44.1 kHz, 16-bit PCM. Duration = scene duration. Mock: silence.
 
 ---
 
-## Stage 7: Typography overlay
-
-**Module:** `horror_story.adapters.typography.mock` (via `TypographyAdapter`)
-**Input:** `scripts/script_<id>.json` (all segments + dialogue, both languages)
-**Output:** `video/typography_<scene_id>.png`
-
-Transparent RGBA PNG with bilingual text rendered in constrained safe-area boxes.
-No video output; no FFmpeg. Pillow only. The compositor composites this PNG onto the
-motion video frames at Stage 8.
-
-**Adaptive zones v1 layout (current mock contract):**
-- Two possible zones: primary (narration) and secondary (dialogue, optional).
-- **Primary zone:** bottom strip, full width minus margins, max 30% frame height.
-  Contains narration EN text + secondary language text.
-- **Secondary zone:** upper left or right strip, max 50% frame width, max 30% frame height.
-  Present only when `dialogue_lines` is non-empty. Contains dialogue character + text.
-- Zone side (left vs right) derived from `SHA-256(scene_id + ":" + seed)[0] % 2`.
-- Each zone is a semi-transparent dark box (`rgba(0,0,0,160)`) with padding.
-- Text is clamped to fit the box; overflow is truncated, never drawn outside the box.
-- Opaque pixels must stay below 50% of total frame area.
-- Zones must not overlap and must remain within frame bounds.
-- Layout is fully deterministic from `scene_id`, `seed`, `width`, `height`, and script content.
-
-**Typography stage scope — MVP contract:**
-- Typography owns: text layout, font selection, canvas sizing, zone positioning.
-- Typography does NOT: generate MP4, invoke FFmpeg, own subtitle timing, emit video of any kind.
-- Output is always a single transparent RGBA PNG per scene.
-- The compositor (Stage 8) is solely responsible for applying this overlay to video.
-
-**Future work (Sprint 03+ only — NOT MVP):**
-Per-segment timed typography, animated subtitles, per-frame PNG sequences, and
-ASS/SRT subtitle pipelines are out of scope until at least Sprint 03. No spec, issue, or
-implementation should describe typography producing MP4 or invoking FFmpeg.
-
----
-
-## Stage 7.5: Timeline planner
+## Stage 7: Timeline planner
 
 **Module:** `horror_story.pipeline.timeline`
 **Input:** `scripts/script_<id>.json`, motion sidecar, ambient sidecar, typography sidecar,
@@ -191,21 +155,59 @@ See `spec/schemas/timeline.schema.json`.
 
 ---
 
-## Stage 8: Scene compositor
+## Stage 8: Typography overlay
+
+**Module:** `horror_story.adapters.typography.mock` (via `TypographyAdapter`)
+**Input:** `scripts/script_<id>.json` + `video/timeline_<id>.json`
+**Output:**
+- `video/typography_<scene_id>_seg-N.png` — transparent RGBA PNG per segment
+- `video/typography_<scene_id>_timing.json` — timing manifest
+
+Typography reads the timeline to determine per-segment start/end times and produces one
+RGBA PNG per narration/dialogue segment. No video output; no FFmpeg. Pillow only.
+The compositor composites each PNG onto the motion video frames at Stage 9 using the
+timing manifest.
+
+**Adaptive zones v1 layout (current mock contract):**
+- Two possible zones: primary (narration) and secondary (dialogue, optional).
+- **Primary zone:** bottom strip, full width minus margins, max 30% frame height.
+  Contains narration EN text + secondary language text.
+- **Secondary zone:** upper left or right strip, max 50% frame width, max 30% frame height.
+  Present only when `dialogue_lines` is non-empty. Contains dialogue character + text.
+- Zone side (left vs right) derived from `SHA-256(scene_id + ":" + seed)[0] % 2`.
+- Each zone is a semi-transparent dark box (`rgba(0,0,0,160)`) with padding.
+- Text is clamped to fit the box; overflow is truncated, never drawn outside the box.
+- Opaque pixels must stay below 50% of total frame area.
+- Zones must not overlap and must remain within frame bounds.
+- Layout is fully deterministic from `scene_id`, `seed`, `width`, `height`, and script content.
+
+**Typography stage scope — contract:**
+- Typography owns: text layout, font selection, canvas sizing, zone positioning, segment timing.
+- Typography does NOT: generate MP4, invoke FFmpeg, own scene-level timing, emit video of any kind.
+- Output is one transparent RGBA PNG per segment plus a timing manifest JSON.
+- The compositor (Stage 9) is solely responsible for applying these overlays to video.
+
+See `spec/schemas/typography_timing.schema.json`.
+
+---
+
+## Stage 9: Scene compositor
 
 **Module:** `horror_story.pipeline.compositor`
-**Input:** `video/timeline_<scene_id>.json` + all referenced media artifacts
+**Input:** `video/timeline_<scene_id>.json` + `video/typography_<scene_id>_timing.json`
+           + all other referenced media artifacts
 **Output:** `video/scene_<scene_id>_composed.mp4`
 
-FFmpeg pipeline driven by the Stage 7.5 timeline artifact:
-1. Alpha-composite the typography PNG overlay onto the motion video (`overlay` filter).
+FFmpeg pipeline driven by the Stage 7 timeline artifact and Stage 8 typography timing manifest:
+1. Alpha-composite each per-segment typography PNG onto the motion video at the times
+   specified in `typography_<scene_id>_timing.json` (`overlay` filter with `enable` expression).
 2. Mix narration + dialogue + ambient into single stereo audio track (`amix`),
    using the absolute `start_s` offsets from the timeline.
 3. Mux video + audio into output MP4.
 
 ---
 
-## Stage 9: Final renderer
+## Stage 10: Final renderer
 
 **Module:** `horror_story.pipeline.renderer`
 **Input:** All `video/scene_<id>_composed.mp4` in scene order, manifest metadata
@@ -222,12 +224,26 @@ FFmpeg concat:
 ## Stage ordering and dependencies
 
 ```
+Stage 1:  Parse
+Stage 2:  Script generator
+Stage 3a: Narration TTS
+Stage 3b: Dialogue TTS
+Stage 4:  Keyframe
+Stage 5:  Motion
+Stage 6:  Ambient audio
+Stage 7:  Timeline planner   ← runs before Typography
+Stage 8:  Typography overlay ← reads timeline.json
+Stage 9:  Compositor
+Stage 10: Renderer
+```
+
+```
 manifest  ──► parse  ──► script  ──► [tts-narration, tts-dialogue]
                                   ──► image  ──► motion
                                   ──► audio
-                                  ──► typography
                  timeline-planner (waits for: script, tts-* sidecars, motion, audio, typography sidecars)
-                 compositor (waits for: timeline, all media artifacts)
+                 typography (waits for: script, timeline)
+                 compositor (waits for: timeline, typography timing manifest, all media artifacts)
                  renderer (waits for: all composited scenes)
 ```
 

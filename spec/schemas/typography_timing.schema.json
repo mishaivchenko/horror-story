@@ -1,0 +1,27 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "TypographyTiming",
+  "type": "object",
+  "required": ["schema_version", "scene_id", "segments"],
+  "properties": {
+    "schema_version": { "type": "string" },
+    "scene_id": { "type": "string" },
+    "segments": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["seg_id", "start_s", "end_s", "png", "text_en", "text_uk"],
+        "properties": {
+          "seg_id": { "type": "string" },
+          "start_s": { "type": "number", "minimum": 0 },
+          "end_s": { "type": "number", "minimum": 0 },
+          "png": { "type": "string" },
+          "text_en": { "type": "string" },
+          "text_uk": { "type": "string" }
+        },
+        "additionalProperties": false
+      }
+    }
+  },
+  "additionalProperties": false
+}

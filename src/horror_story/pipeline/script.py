@@ -9,7 +9,10 @@ from horror_story.models import DialogueLine, Scene, Script, Segment
 
 # Matches "Word: text" — character name is letters and spaces only (no newlines)
 _DIALOGUE_RE = re.compile(r'^([A-Z][a-zA-Z ]+):\s+(.+)$', re.MULTILINE)
-_MAX_SEGMENT_WORDS = 40
+_MAX_SEGMENT_WORDS = 200
+
+# Sentence-ending punctuation patterns used for mid-paragraph splits.
+_SENTENCE_END_RE = re.compile(r'(?<=[.?!])\s+')
 
 
 def mock_translate(text: str) -> str:
@@ -31,26 +34,89 @@ def _pacing_ms(word_count: int, mood: str = "neutral") -> int:
     return round(base * _MOOD_PACING.get(mood, 1.0))
 
 
+def _split_at_sentences(text: str) -> list[str]:
+    """Split text at sentence boundaries into chunks of ≤ _MAX_SEGMENT_WORDS words.
+
+    If an individual sentence exceeds the limit it is emitted as its own chunk;
+    no mid-word splitting occurs.
+    """
+    sentences = _SENTENCE_END_RE.split(text)
+    chunks: list[str] = []
+    current_words: list[str] = []
+    for sentence in sentences:
+        sentence = sentence.strip()
+        if not sentence:
+            continue
+        sentence_words = sentence.split()
+        if current_words and len(current_words) + len(sentence_words) > _MAX_SEGMENT_WORDS:
+            chunks.append(" ".join(current_words))
+            current_words = sentence_words
+        else:
+            current_words.extend(sentence_words)
+    if current_words:
+        chunks.append(" ".join(current_words))
+    return chunks
+
+
 def _split_narration(text: str) -> list[str]:
-    """Remove dialogue lines then split remaining text into ≤40-word segments."""
+    """Remove dialogue lines then split remaining text into paragraph-aware segments.
+
+    Consecutive short paragraphs are merged until the accumulated word count
+    reaches _MAX_SEGMENT_WORDS.  A single paragraph that exceeds the limit is
+    split at sentence boundaries.  No mid-word or mid-sentence splitting occurs.
+    """
     cleaned = _DIALOGUE_RE.sub("", text)
-    words = cleaned.split()
+    # Split on blank lines to get paragraphs.
+    raw_paragraphs = cleaned.split("\n\n")
+    paragraphs = [p.strip() for p in raw_paragraphs if p.strip()]
+
     segments: list[str] = []
-    while words:
-        chunk = words[:_MAX_SEGMENT_WORDS]
-        words = words[_MAX_SEGMENT_WORDS:]
-        segments.append(" ".join(chunk))
+    current_words: list[str] = []
+
+    for para in paragraphs:
+        para_words = para.split()
+        if not para_words:
+            continue
+        if len(para_words) > _MAX_SEGMENT_WORDS:
+            # Flush any accumulated words first.
+            if current_words:
+                segments.append(" ".join(current_words))
+                current_words = []
+            # Split oversized paragraph at sentence boundaries.
+            segments.extend(_split_at_sentences(para))
+        elif current_words and len(current_words) + len(para_words) > _MAX_SEGMENT_WORDS:
+            # Merging would exceed the limit; flush and start fresh.
+            segments.append(" ".join(current_words))
+            current_words = para_words
+        else:
+            current_words.extend(para_words)
+
+    if current_words:
+        segments.append(" ".join(current_words))
+
     return [s for s in segments if s]
 
 
-def _find_insert_after(text: str, dialogue_match: re.Match[str]) -> Optional[str]:
-    """Return segment_id of the segment whose text ends before the dialogue match start."""
-    narration_text = text[: dialogue_match.start()]
-    words_before = narration_text.split()
-    if not words_before:
+def _find_insert_after(segments: list[str], dialogue_match: re.Match[str], full_text: str) -> Optional[str]:
+    """Return segment_id of the last narration segment whose content precedes the dialogue.
+
+    We locate the dialogue in the full scene text and find the last segment whose
+    words all appear before the match start position.
+    """
+    narration_before = _DIALOGUE_RE.sub("", full_text[: dialogue_match.start()]).split()
+    if not narration_before:
         return None
-    seg_index = (len(words_before) - 1) // _MAX_SEGMENT_WORDS
-    return f"seg-{seg_index}"
+    # Count how many narration words appear before the dialogue to find the segment.
+    word_budget = len(narration_before)
+    cumulative = 0
+    result_index = 0
+    for i, seg_text in enumerate(segments):
+        seg_words = len(seg_text.split())
+        cumulative += seg_words
+        result_index = i
+        if cumulative >= word_budget:
+            break
+    return f"seg-{result_index}"
 
 
 def generate_script(scene: Scene, manifest: Manifest) -> Script:
@@ -70,13 +136,15 @@ def generate_script(scene: Scene, manifest: Manifest) -> Script:
             )
         )
 
+    seg_texts = [seg.text_en for seg in segments]
+
     dialogue_lines: list[DialogueLine] = []
     for j, match in enumerate(_DIALOGUE_RE.finditer(scene.text)):
         character = match.group(1).strip()
         text_en = match.group(2).strip()
         word_count = len(text_en.split())
         voice_id = manifest.voices.get(character.lower(), narrator_voice)
-        insert_after = _find_insert_after(scene.text, match)
+        insert_after = _find_insert_after(seg_texts, match, scene.text)
         dialogue_lines.append(
             DialogueLine(
                 line_id=f"dlg-{j}",

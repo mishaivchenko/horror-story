@@ -592,6 +592,66 @@ def test_sidecar_paths_are_relative(
         assert not Path(p).is_absolute(), f"dialogue_wav must be relative, got: {p!r}"
 
 
+def test_compose_scene_ffmpeg_command_includes_stereo_upmix(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """FFmpeg filter graph must upmix each audio input to stereo before amix."""
+    captured: dict[str, Any] = {}
+
+    def fake_run(cmd: Any, **kwargs: Any) -> Any:
+        captured["cmd"] = list(cmd)
+        for part in cmd:
+            if isinstance(part, str) and part.endswith(".tmp.mp4"):
+                Path(part).touch()
+
+    monkeypatch.setattr("horror_story.pipeline.compositor.ffmpeg_available", lambda: True)
+    monkeypatch.setattr("subprocess.run", fake_run)
+
+    narr = tmp_path / "narration.wav"
+    _write_silent_wav(narr, 1.5)  # mono (1 channel)
+    amb = tmp_path / "ambient.wav"
+    _write_silent_wav(amb, 2.0, channels=2)
+    png = tmp_path / "overlay.png"
+    _write_dummy_png(png)
+    mp4 = tmp_path / "motion.mp4"
+    mp4.touch()
+
+    tl = _make_timeline(
+        tmp_path,
+        duration_s=2.0,
+        motion_path=str(mp4),
+        typography_path=str(png),
+        audio_tracks=[
+            {
+                "track_id": "audio-seg-0",
+                "track_type": "narration",
+                "source_path": str(narr),
+                "start_s": 0.0,
+                "end_s": 1.5,
+                "line_ref": "seg-0",
+            },
+            {
+                "track_id": "audio-ambient",
+                "track_type": "ambient",
+                "source_path": str(amb),
+                "start_s": 0.0,
+                "end_s": 2.0,
+                "line_ref": "ambient",
+            },
+        ],
+    )
+    out = tmp_path / "scene.mp4"
+    compose_scene(tl, out)
+
+    cmd_str = " ".join(str(c) for c in captured["cmd"])
+    assert "aformat=channel_layouts=stereo" in cmd_str, (
+        "FFmpeg filter graph must include aformat=channel_layouts=stereo for mono→stereo upmix"
+    )
+    assert "-ac" in captured["cmd"] and "2" in captured["cmd"], (
+        "FFmpeg command must include -ac 2 to enforce stereo AAC output"
+    )
+
+
 def test_compose_scene_returns_output_path(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
