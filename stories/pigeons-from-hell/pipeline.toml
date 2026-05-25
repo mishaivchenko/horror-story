@@ -21,5 +21,6 @@ typography = "mock"
 
 [voices]
 narrator = "narrator_en"
-branner = "narrator_en"
-griswell = "narrator_en"
+griswell = "character_en"
+branner = "character_en"
+buckner = "character_en"
