@@ -10,7 +10,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from horror_story.cli import _build_parser, main
+from horror_story.cli import _build_parser, _resolve_latest_run, main
 from horror_story.pipeline.compositor import ffmpeg_available
 
 requires_ffmpeg = pytest.mark.skipif(
@@ -702,3 +702,53 @@ def test_motion_duration_derived_from_voice_sidecars(
         # The mini-story has at least one segment; pacing-based total would be shorter
         # than actual (3x), so captured duration must be > the heuristic total / 3
         assert dur >= 1.0  # enforced floor
+
+
+# ---------------------------------------------------------------------------
+# Issue #020: _resolve_latest_run
+# ---------------------------------------------------------------------------
+
+def test_resolve_latest_run_returns_bare_when_only_bare_exists(tmp_path: Path) -> None:
+    bare = tmp_path / "run_story_42"
+    bare.mkdir()
+    assert _resolve_latest_run(tmp_path, "run_story_42") == bare
+
+
+def test_resolve_latest_run_returns_none_when_nothing_exists(tmp_path: Path) -> None:
+    assert _resolve_latest_run(tmp_path, "run_story_42") is None
+
+
+def test_resolve_latest_run_prefers_r1_over_bare(tmp_path: Path) -> None:
+    bare = tmp_path / "run_story_42"
+    bare.mkdir()
+    r1 = tmp_path / "run_story_42_r1"
+    r1.mkdir()
+    assert _resolve_latest_run(tmp_path, "run_story_42") == r1
+
+
+def test_resolve_latest_run_uses_numeric_order_not_lexicographic(tmp_path: Path) -> None:
+    for n in (1, 2, 10):
+        (tmp_path / f"run_story_42_r{n}").mkdir()
+    # lexicographic sort would pick r2; numeric must pick r10
+    assert _resolve_latest_run(tmp_path, "run_story_42") == tmp_path / "run_story_42_r10"
+
+
+def test_resolve_latest_run_ignores_non_revision_dirs(tmp_path: Path) -> None:
+    (tmp_path / "run_story_42_backup").mkdir()
+    (tmp_path / "run_story_42_r1").mkdir()
+    assert _resolve_latest_run(tmp_path, "run_story_42") == tmp_path / "run_story_42_r1"
+
+
+def test_scene_flag_resolves_to_latest_rn_when_bare_absent(tmp_path: Path) -> None:
+    """--scene must find the _r1 directory when bare run does not exist (issue #020)."""
+    story_dst, out_dir = _setup_story(tmp_path)
+    # First full run → creates bare run_mini-story_42
+    main(_base_args(story_dst, out_dir))
+    # Second full run with --regen → creates run_mini-story_42_r1
+    main(_base_args(story_dst, out_dir) + ["--regen"])
+    # Remove bare dir so only _r1 exists
+    import shutil as _shutil
+    _shutil.rmtree(out_dir / "run_mini-story_42")
+    # --scene must succeed by resolving to _r1
+    scene_id = "old-plantation-house-loomed-against-darkening-sk"
+    main(_base_args(story_dst, out_dir) + ["--scene", scene_id])

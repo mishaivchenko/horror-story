@@ -70,6 +70,27 @@ def _locate_toml(story_path: Path) -> Path:
     )
 
 
+def _resolve_latest_run(out_dir: Path, base_run_id: str) -> Path | None:
+    """Return the most recent run directory for base_run_id.
+
+    Considers the bare directory (revision 0) and all _r<N> siblings.
+    Chooses the one with the highest integer revision number.
+    Returns None if no run directory exists at all.
+    """
+    import re as _re
+    candidates: list[tuple[int, Path]] = []
+    bare = out_dir / base_run_id
+    if bare.exists():
+        candidates.append((0, bare))
+    for p in out_dir.glob(f"{base_run_id}_r*"):
+        m = _re.fullmatch(r".*_r(\d+)", p.name)
+        if m and p.is_dir():
+            candidates.append((int(m.group(1)), p))
+    if not candidates:
+        return None
+    return max(candidates, key=lambda t: t[0])[1]
+
+
 def _per_scene_seed(base_seed: int, scene_index: int, stage_index: int) -> int:
     return base_seed ^ (scene_index * 1000) ^ stage_index
 
@@ -447,16 +468,14 @@ def _cmd_run(args: argparse.Namespace) -> None:
 
     # --scene: load existing run, write _r<n> artifacts, update index, re-render
     if args.scene:
-        if not base_run_dir.exists():
-            candidates = sorted(out_dir.glob(f"{base_run_id}_r*"))
-            if candidates:
-                base_run_dir = candidates[-1]
-            else:
-                print(
-                    f"[error] no existing run at {base_run_dir}. Run without --scene first.",
-                    file=sys.stderr,
-                )
-                sys.exit(1)
+        base_run_dir = _resolve_latest_run(out_dir, base_run_id)
+        if base_run_dir is None:
+            print(
+                f"[error] no existing run at {out_dir / base_run_id}. "
+                "Run without --scene first.",
+                file=sys.stderr,
+            )
+            sys.exit(1)
 
         manifest = Manifest.from_path(base_run_dir / "manifest.json")
         scenes = parse_story(story_text, config.story.id)
