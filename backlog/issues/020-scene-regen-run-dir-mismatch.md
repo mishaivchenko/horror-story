@@ -1,6 +1,6 @@
 # Issue #020 — --scene flag fails when full run used --regen
 
-**Status:** Open
+**Status:** Done
 **Sprint:** 03
 **Labels:** cli, bug
 **Estimate:** 0.5d

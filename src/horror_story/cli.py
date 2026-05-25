@@ -448,11 +448,15 @@ def _cmd_run(args: argparse.Namespace) -> None:
     # --scene: load existing run, write _r<n> artifacts, update index, re-render
     if args.scene:
         if not base_run_dir.exists():
-            print(
-                f"[error] no existing run at {base_run_dir}. Run without --scene first.",
-                file=sys.stderr,
-            )
-            sys.exit(1)
+            candidates = sorted(out_dir.glob(f"{base_run_id}_r*"))
+            if candidates:
+                base_run_dir = candidates[-1]
+            else:
+                print(
+                    f"[error] no existing run at {base_run_dir}. Run without --scene first.",
+                    file=sys.stderr,
+                )
+                sys.exit(1)
 
         manifest = Manifest.from_path(base_run_dir / "manifest.json")
         scenes = parse_story(story_text, config.story.id)

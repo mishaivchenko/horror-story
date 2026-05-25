@@ -60,13 +60,21 @@ Branner = "character_en"
 ### 3. Run command
 
 ```bash
+# Step 1: create baseline (mock, fast)
 python -m horror_story run \
   --story stories/pigeons-from-hell/pigeons_from_hell_EN.txt \
-  --out output/pigeons-test \
+  --out output/sprint04 \
   --seed 42
+
+# Step 2: re-run scene 1 with Kokoro
+python -m horror_story run \
+  --story stories/pigeons-from-hell/pigeons_from_hell_EN.txt \
+  --out output/sprint04 \
+  --seed 42 \
+  --scene griswell-awoke-suddenly-every-nerve-tingling-pre
 ```
 
-Confirm `output/pigeons-test/.../final_pigeons-from-hell_42.mp4` is produced and playable.
+Confirm `output/sprint04/run_pigeons-from-hell_42/video/scene_griswell-awoke-suddenly-every-nerve-tingling-pre_composed_r1.mp4` is produced and playable (≤30s).
 
 ---
 
