@@ -4,7 +4,7 @@ import json
 import hashlib
 import textwrap
 from pathlib import Path
-from typing import NamedTuple
+from typing import Any, NamedTuple
 
 from PIL import Image, ImageDraw, ImageFont
 
@@ -173,91 +173,101 @@ def _render_overlay(
 
 
 class MockTypographyAdapter(TypographyAdapter):
-    """Deterministic transparent-PNG typography adapter. No video rendering; uses Pillow."""
+    """Deterministic per-segment RGBA PNG typography adapter. No video rendering; uses Pillow."""
 
     def render(
         self,
-        script_path: Path,
-        duration_s: float,
+        script: dict[str, Any],
+        timeline: dict[str, Any],
+        scene_id: str,
+        seed: int,
+        out_dir: Path,
+        out_timing: Path,
         width: int,
         height: int,
-        fps: int,
-        seed: int,
-        out_path: Path,
     ) -> Path:
         if width < _MIN_WIDTH:
             raise ValueError(f"width must be >= {_MIN_WIDTH}, got {width}")
         if height < _MIN_HEIGHT:
             raise ValueError(f"height must be >= {_MIN_HEIGHT}, got {height}")
-        if duration_s < 0:
-            raise ValueError(f"duration_s must be >= 0, got {duration_s}")
-        if fps < 1:
-            raise ValueError(f"fps must be >= 1, got {fps}")
         if seed < 0:
             raise ValueError("seed must be >= 0")
-        if not script_path.exists():
-            raise FileNotFoundError(f"script not found: {script_path}")
 
-        script = json.loads(script_path.read_text())
+        segments: list[dict[str, Any]] = script.get("segments", [])
+        dialogue_lines: list[dict[str, Any]] = script.get("dialogue_lines", [])
 
-        story_id: str = script.get("story_id", "unknown")
-        scene_id: str = script.get("scene_id", "unknown")
-
-        segments = script.get("segments", [])
-        dialogue_lines = script.get("dialogue_lines", [])
-
-        narration_en = " ".join(str(seg["text_en"]) for seg in segments)
-        narration_sec = " ".join(str(seg["text_secondary"]) for seg in segments)
-
-        dlg_en_parts: list[str] = []
-        dlg_sec_parts: list[str] = []
-        for dlg in dialogue_lines:
-            char = str(dlg["character"])
-            dlg_en_parts.append(f"{char}: {dlg['text_en']}")
-            dlg_sec_parts.append(f"{char}: {dlg['text_secondary']}")
-
-        dialogue_en = " ".join(dlg_en_parts)
-        dialogue_secondary = " ".join(dlg_sec_parts)
-
-        img = _render_overlay(
-            narration_en,
-            narration_sec,
-            dialogue_en,
-            dialogue_secondary,
-            scene_id,
-            seed,
-            width,
-            height,
-        )
-
-        tmp = out_path.with_suffix(".png.tmp")
-        img.save(str(tmp), format="PNG")
-        tmp.replace(out_path)
-
-        def _rel(p: Path) -> str:
-            try:
-                return str(p.relative_to(Path.cwd()))
-            except ValueError:
-                return str(p)
-
-        sidecar = {
-            "schema_version": "1.0",
-            "story_id": story_id,
-            "scene_id": scene_id,
-            "source_script": _rel(script_path),
-            "duration_s": duration_s,
-            "width": width,
-            "height": height,
-            "fps": fps,
-            "seed": seed,
-            "adapter": "mock",
-            "output_path": out_path.name,
-            "status": "generated",
-            "error": None,
+        # Build a lookup of segment data by segment_id
+        seg_by_id: dict[str, dict[str, Any]] = {
+            str(s["segment_id"]): s for s in segments
         }
-        sidecar_path = out_path.with_suffix(".json")
-        tmp_sidecar = sidecar_path.with_suffix(".json.tmp")
-        tmp_sidecar.write_text(json.dumps(sidecar, indent=2))
-        tmp_sidecar.replace(sidecar_path)
 
-        return out_path
+        # Build a lookup of dialogue lines by insert_after_segment
+        dlg_by_after: dict[str, list[dict[str, Any]]] = {}
+        for dlg in dialogue_lines:
+            after = str(dlg.get("insert_after_segment", ""))
+            dlg_by_after.setdefault(after, []).append(dlg)
+
+        # Collect narration tracks from the timeline
+        narration_tracks = [
+            tr for tr in timeline.get("audio_tracks", [])
+            if tr.get("track_type") == "narration"
+        ]
+
+        timing_segments: list[dict[str, Any]] = []
+
+        for i, track in enumerate(narration_tracks):
+            line_ref = str(track["line_ref"])
+            start_s: float = float(track["start_s"])
+            end_s: float = float(track["end_s"])
+
+            seg_data = seg_by_id.get(line_ref, {})
+            text_en = str(seg_data.get("text_en", ""))
+            text_secondary = str(seg_data.get("text_secondary", ""))
+
+            # Collect dialogue that follows this narration segment
+            following_dlg = dlg_by_after.get(line_ref, [])
+            dlg_en_parts: list[str] = []
+            dlg_sec_parts: list[str] = []
+            for dlg in following_dlg:
+                dlg_en_parts.append(str(dlg.get("text_en", "")))
+                dlg_sec_parts.append(str(dlg.get("text_secondary", "")))
+            dialogue_en = " ".join(dlg_en_parts)
+            dialogue_secondary = " ".join(dlg_sec_parts)
+
+            img = _render_overlay(
+                text_en,
+                text_secondary,
+                dialogue_en,
+                dialogue_secondary,
+                scene_id,
+                seed,
+                width,
+                height,
+            )
+
+            png_filename = f"typography_{scene_id}_seg-{i}.png"
+            png_path = out_dir / png_filename
+            tmp_png = png_path.with_suffix(".png.tmp")
+            img.save(str(tmp_png), format="PNG")
+            tmp_png.replace(png_path)
+
+            timing_segments.append({
+                "seg_id": line_ref,
+                "start_s": start_s,
+                "end_s": end_s,
+                "png": png_path.name,
+                "text_en": text_en,
+                "text_uk": text_secondary,
+            })
+
+        timing_manifest: dict[str, Any] = {
+            "schema_version": "1.0",
+            "scene_id": scene_id,
+            "segments": timing_segments,
+        }
+
+        tmp_timing = out_timing.with_suffix(".json.tmp")
+        tmp_timing.write_text(json.dumps(timing_manifest, indent=2))
+        tmp_timing.replace(out_timing)
+
+        return out_timing

@@ -185,7 +185,7 @@ def test_narration_only_timeline(tmp_path: Path) -> None:
     vl = _vl_sidecars(tmp_path, "s01", segs)
     out = tmp_path / "timeline.json"
 
-    plan_timeline(s, m, a, t, vl, out)
+    plan_timeline(s, m, a, vl, out, typography_sidecar_path=t)
     assert out.exists()
     data = json.loads(out.read_text())
 
@@ -215,7 +215,7 @@ def test_narration_track_source_path_is_wav_not_mp4(tmp_path: Path) -> None:
     vl = _vl_sidecars(tmp_path, "sp1", segs)
     out = tmp_path / "timeline.json"
 
-    plan_timeline(s, m, a, t, vl, out)
+    plan_timeline(s, m, a, vl, out, typography_sidecar_path=t)
     data = json.loads(out.read_text())
 
     for track in data["audio_tracks"]:
@@ -237,7 +237,7 @@ def test_dialogue_track_source_path_is_wav_not_mp4(tmp_path: Path) -> None:
     vl = _vl_sidecars(tmp_path, "sp2", segs, dlgs)
     out = tmp_path / "timeline.json"
 
-    plan_timeline(s, m, a, t, vl, out)
+    plan_timeline(s, m, a, vl, out, typography_sidecar_path=t)
     data = json.loads(out.read_text())
 
     for track in data["audio_tracks"]:
@@ -260,7 +260,7 @@ def test_audio_source_paths_match_voice_line_sidecars(tmp_path: Path) -> None:
     vl = _vl_sidecars(tmp_path, "sp3", segs, dlgs)
     out = tmp_path / "timeline.json"
 
-    plan_timeline(s, m, a, t, vl, out)
+    plan_timeline(s, m, a, vl, out, typography_sidecar_path=t)
     data = json.loads(out.read_text())
 
     # Build expected mapping from sidecars
@@ -289,7 +289,7 @@ def test_missing_voice_line_sidecar_raises_key_error(tmp_path: Path) -> None:
     out = tmp_path / "timeline.json"
 
     with pytest.raises(KeyError, match="seg-1"):
-        plan_timeline(s, m, a, t, vl, out)
+        plan_timeline(s, m, a, vl, out, typography_sidecar_path=t)
 
 
 # ---------------------------------------------------------------------------
@@ -307,7 +307,7 @@ def test_dialogue_inserted_after_segment(tmp_path: Path) -> None:
     vl = _vl_sidecars(tmp_path, "s02", segs, dlgs)
     out = tmp_path / "timeline.json"
 
-    plan_timeline(s, m, a, t, vl, out)
+    plan_timeline(s, m, a, vl, out, typography_sidecar_path=t)
     data = json.loads(out.read_text())
     audio = data["audio_tracks"]
 
@@ -336,7 +336,7 @@ def test_invalid_insert_after_falls_back_to_end(tmp_path: Path) -> None:
     vl = _vl_sidecars(tmp_path, "s03", segs, dlgs)
     out = tmp_path / "timeline.json"
 
-    plan_timeline(s, m, a, t, vl, out)
+    plan_timeline(s, m, a, vl, out, typography_sidecar_path=t)
     data = json.loads(out.read_text())
     by_ref = {tr["line_ref"]: tr for tr in data["audio_tracks"] if tr["track_type"] != "ambient"}
 
@@ -356,7 +356,7 @@ def test_null_insert_after_falls_back_to_end(tmp_path: Path) -> None:
     vl = _vl_sidecars(tmp_path, "s04", segs, dlgs)
     out = tmp_path / "timeline.json"
 
-    plan_timeline(s, m, a, t, vl, out)
+    plan_timeline(s, m, a, vl, out, typography_sidecar_path=t)
     data = json.loads(out.read_text())
     by_ref = {tr["line_ref"]: tr for tr in data["audio_tracks"] if tr["track_type"] != "ambient"}
 
@@ -378,7 +378,7 @@ def test_ambient_spans_full_scene(tmp_path: Path) -> None:
     vl = _vl_sidecars(tmp_path, "s05", segs)
     out = tmp_path / "timeline.json"
 
-    plan_timeline(s, m, a, t, vl, out)
+    plan_timeline(s, m, a, vl, out, typography_sidecar_path=t)
     data = json.loads(out.read_text())
     ambient = next(tr for tr in data["audio_tracks"] if tr["track_type"] == "ambient")
     assert ambient["start_s"] == pytest.approx(0.0)
@@ -399,7 +399,7 @@ def test_typography_spans_full_scene(tmp_path: Path) -> None:
     vl = _vl_sidecars(tmp_path, "s06", segs)
     out = tmp_path / "timeline.json"
 
-    plan_timeline(s, m, a, t, vl, out)
+    plan_timeline(s, m, a, vl, out, typography_sidecar_path=t)
     data = json.loads(out.read_text())
     assert len(data["overlay_tracks"]) == 1
     overlay = data["overlay_tracks"][0]
@@ -421,7 +421,7 @@ def test_motion_spans_full_scene(tmp_path: Path) -> None:
     vl = _vl_sidecars(tmp_path, "s07", segs)
     out = tmp_path / "timeline.json"
 
-    plan_timeline(s, m, a, t, vl, out)
+    plan_timeline(s, m, a, vl, out, typography_sidecar_path=t)
     data = json.loads(out.read_text())
     assert len(data["video_tracks"]) == 1
     video = data["video_tracks"][0]
@@ -443,7 +443,7 @@ def test_duration_is_max_of_all_tracks_motion_longest(tmp_path: Path) -> None:
     vl = _vl_sidecars(tmp_path, "s08", segs)
     out = tmp_path / "timeline.json"
 
-    plan_timeline(s, m, a, t, vl, out)
+    plan_timeline(s, m, a, vl, out, typography_sidecar_path=t)
     data = json.loads(out.read_text())
     assert data["duration_s"] == pytest.approx(10.0)
 
@@ -457,7 +457,7 @@ def test_duration_is_max_of_all_tracks_audio_longest(tmp_path: Path) -> None:
     vl = _vl_sidecars(tmp_path, "s09", segs)
     out = tmp_path / "timeline.json"
 
-    plan_timeline(s, m, a, t, vl, out)
+    plan_timeline(s, m, a, vl, out, typography_sidecar_path=t)
     data = json.loads(out.read_text())
     assert data["duration_s"] == pytest.approx(8.0)
 
@@ -471,7 +471,7 @@ def test_duration_is_max_of_all_tracks_ambient_longest(tmp_path: Path) -> None:
     vl = _vl_sidecars(tmp_path, "s10", segs)
     out = tmp_path / "timeline.json"
 
-    plan_timeline(s, m, a, t, vl, out)
+    plan_timeline(s, m, a, vl, out, typography_sidecar_path=t)
     data = json.loads(out.read_text())
     assert data["duration_s"] == pytest.approx(12.0)
 
@@ -494,7 +494,7 @@ def test_deterministic_output_same_inputs(tmp_path: Path) -> None:
         typ = _typography_sidecar(d, "sdet", 5.0)
         vl = _vl_sidecars(d, "sdet", segs, dlgs)
         out = d / "timeline.json"
-        plan_timeline(s, m, amb, typ, vl, out)
+        plan_timeline(s, m, amb, vl, out, typography_sidecar_path=typ)
         return json.loads(out.read_text())
 
     d1 = make_timeline("run1")
@@ -521,7 +521,7 @@ def test_audio_track_ids_are_unique(tmp_path: Path) -> None:
     vl = _vl_sidecars(tmp_path, "suid", segs, dlgs)
     out = tmp_path / "timeline.json"
 
-    plan_timeline(s, m, a, t, vl, out)
+    plan_timeline(s, m, a, vl, out, typography_sidecar_path=t)
     data = json.loads(out.read_text())
     ids = [tr["track_id"] for tr in data["audio_tracks"]]
     assert len(ids) == len(set(ids))
@@ -541,7 +541,7 @@ def test_timeline_schema_valid_narration_only(tmp_path: Path) -> None:
     vl = _vl_sidecars(tmp_path, "sv1", segs)
     out = tmp_path / "timeline.json"
 
-    plan_timeline(s, m, a, t, vl, out)
+    plan_timeline(s, m, a, vl, out, typography_sidecar_path=t)
     data = json.loads(out.read_text())
     validate(data, "timeline.schema.json")
 
@@ -556,7 +556,7 @@ def test_timeline_schema_valid_with_dialogue(tmp_path: Path) -> None:
     vl = _vl_sidecars(tmp_path, "sv2", segs, dlgs)
     out = tmp_path / "timeline.json"
 
-    plan_timeline(s, m, a, t, vl, out)
+    plan_timeline(s, m, a, vl, out, typography_sidecar_path=t)
     data = json.loads(out.read_text())
     validate(data, "timeline.schema.json")
 
@@ -596,7 +596,7 @@ def test_plan_timeline_does_not_use_ffmpeg(tmp_path: Path, monkeypatch: pytest.M
     vl = _vl_sidecars(tmp_path, "sff", segs)
     out = tmp_path / "timeline.json"
 
-    plan_timeline(s, m, a, t, vl, out)
+    plan_timeline(s, m, a, vl, out, typography_sidecar_path=t)
     assert ffmpeg_called == [], f"FFmpeg was invoked unexpectedly: {ffmpeg_called}"
 
 
@@ -696,7 +696,7 @@ def test_timeline_uses_actual_duration_when_longer_than_pacing(tmp_path: Path) -
     ]
     out = tmp_path / "timeline.json"
 
-    plan_timeline(s, m, a, t, vl, out)
+    plan_timeline(s, m, a, vl, out, typography_sidecar_path=t)
     data = json.loads(out.read_text())
 
     by_ref = {tr["line_ref"]: tr for tr in data["audio_tracks"] if tr["track_type"] != "ambient"}
@@ -734,7 +734,7 @@ def test_timeline_actual_duration_null_falls_back_to_pacing(tmp_path: Path) -> N
     }))
     out = tmp_path / "timeline.json"
 
-    plan_timeline(s, m, a, t, [p], out)
+    plan_timeline(s, m, a, [p], out, typography_sidecar_path=t)
     data = json.loads(out.read_text())
 
     by_ref = {tr["line_ref"]: tr for tr in data["audio_tracks"] if tr["track_type"] != "ambient"}

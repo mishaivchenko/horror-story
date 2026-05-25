@@ -355,7 +355,17 @@ def test_adapter_factory_called_with_config_values(
     # Stub out heavy pipeline stages so the test stays fast.
     from horror_story.pipeline import timeline as tl_mod
     from horror_story.pipeline import compositor as comp_mod
-    monkeypatch.setattr(tl_mod, "plan_timeline", MagicMock())
+
+    def _fake_plan_timeline(*args: Any, **kwargs: Any) -> Path:
+        out: Path = kwargs.get("out_path") or args[4]
+        out.write_text(json.dumps({
+            "schema_version": "1.0", "story_id": "x", "scene_id": "x",
+            "duration_s": 5.0, "fps": 24,
+            "video_tracks": [], "audio_tracks": [], "overlay_tracks": [],
+        }))
+        return out
+
+    monkeypatch.setattr(tl_mod, "plan_timeline", _fake_plan_timeline)
     monkeypatch.setattr(comp_mod, "compose_scene", MagicMock(return_value=None))
     monkeypatch.setattr(comp_mod, "ffmpeg_available", lambda: True)
     # synthesize is mocked out so no sidecars land on disk; stub the reader too.
@@ -686,9 +696,19 @@ def test_motion_duration_derived_from_voice_sidecars(
     from horror_story.adapters.motion import mock as motion_mock
     from horror_story.pipeline import timeline as tl_mod
     from horror_story.pipeline import compositor as comp_mod
+
+    def _fake_plan_timeline2(*args: Any, **kwargs: Any) -> Path:
+        out: Path = kwargs.get("out_path") or args[4]
+        out.write_text(json.dumps({
+            "schema_version": "1.0", "story_id": "x", "scene_id": "x",
+            "duration_s": 5.0, "fps": 24,
+            "video_tracks": [], "audio_tracks": [], "overlay_tracks": [],
+        }))
+        return out
+
     monkeypatch.setattr(MockTTSAdapter, "synthesize", _synthesize_with_inflated_actual)
     monkeypatch.setattr(motion_mock.MockMotionAdapter, "animate", _fake_animate)
-    monkeypatch.setattr(tl_mod, "plan_timeline", MagicMock())
+    monkeypatch.setattr(tl_mod, "plan_timeline", _fake_plan_timeline2)
     monkeypatch.setattr(comp_mod, "compose_scene", MagicMock(return_value=None))
     monkeypatch.setattr(comp_mod, "ffmpeg_available", lambda: True)
 

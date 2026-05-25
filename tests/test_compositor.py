@@ -1,4 +1,4 @@
-"""Tests for Issue #009 — Scene compositor (Stage 8)."""
+"""Tests for Issue #009 / #024 — Scene compositor (Stage 8)."""
 from __future__ import annotations
 
 import json
@@ -48,7 +48,7 @@ def _write_dummy_png(path: Path, width: int = 64, height: int = 64) -> Path:
         img.save(str(path), format="PNG")
     except ImportError:
         # Fallback: write a 1x1 transparent PNG via raw bytes
-        import zlib, base64
+        import base64
         # 1x1 transparent PNG
         raw = base64.b64decode(
             "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg=="
@@ -59,7 +59,8 @@ def _write_dummy_png(path: Path, width: int = 64, height: int = 64) -> Path:
 
 def _write_dummy_mp4(path: Path, duration_s: float, fps: int = 24) -> Path:
     """Write a minimal MP4 using FFmpeg (only called in @requires_ffmpeg tests)."""
-    import shutil, subprocess
+    import shutil
+    import subprocess
     ffmpeg = shutil.which("ffmpeg")
     assert ffmpeg, "ffmpeg required for this helper"
     tmp = path.with_name(path.stem + ".tmp.mp4")
@@ -86,7 +87,6 @@ def _make_timeline(
     duration_s: float = 3.0,
     fps: int = 24,
     motion_path: str,
-    typography_path: str,
     audio_tracks: list[dict[str, Any]],
 ) -> Path:
     tl: dict[str, Any] = {
@@ -104,17 +104,36 @@ def _make_timeline(
             }
         ],
         "audio_tracks": audio_tracks,
-        "overlay_tracks": [
-            {
-                "track_id": "overlay-typography",
-                "source_path": typography_path,
-                "start_s": 0.0,
-                "end_s": duration_s,
-            }
-        ],
+        "overlay_tracks": [],
     }
     p = tmp_path / f"timeline_{scene_id}.json"
     p.write_text(json.dumps(tl, indent=2))
+    return p
+
+
+def _make_timing_manifest(
+    tmp_path: Path,
+    scene_id: str,
+    segments: list[dict[str, Any]],  # each: {"seg_id": str, "start_s": float, "end_s": float, "png": str}
+) -> Path:
+    """Write a typography_timing.json fixture and return its path."""
+    data = {
+        "schema_version": "1.0",
+        "scene_id": scene_id,
+        "segments": [
+            {
+                "seg_id": s["seg_id"],
+                "start_s": s["start_s"],
+                "end_s": s["end_s"],
+                "png": s["png"],
+                "text_en": "test text",
+                "text_uk": "test uk",
+            }
+            for s in segments
+        ],
+    }
+    p = tmp_path / f"typography_{scene_id}_timing.json"
+    p.write_text(json.dumps(data, indent=2))
     return p
 
 
@@ -134,10 +153,12 @@ def test_ffmpeg_not_found_raises(tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     # We need a valid timeline file path (content doesn't matter — raises before reading)
     tl = tmp_path / "timeline.json"
     tl.write_text("{}")
+    timing = tmp_path / "timing.json"
+    timing.write_text("{}")
     out = tmp_path / "out.mp4"
 
     with pytest.raises(FFmpegNotFoundError):
-        compose_scene(tl, out)
+        compose_scene(tl, timing, out)
 
 
 def test_missing_artifact_raises_file_not_found(
@@ -149,7 +170,6 @@ def test_missing_artifact_raises_file_not_found(
     tl = _make_timeline(
         tmp_path,
         motion_path="/nonexistent/motion.mp4",
-        typography_path="/nonexistent/overlay.png",
         audio_tracks=[
             {
                 "track_id": "audio-ambient",
@@ -161,10 +181,17 @@ def test_missing_artifact_raises_file_not_found(
             }
         ],
     )
+    # Use a timing manifest that references a non-existent PNG
+    png_name = "seg-0.png"
+    timing = _make_timing_manifest(
+        tmp_path,
+        scene_id="scene-01",
+        segments=[{"seg_id": "seg-0", "start_s": 0.0, "end_s": 3.0, "png": png_name}],
+    )
     out = tmp_path / "out.mp4"
 
     with pytest.raises(FileNotFoundError):
-        compose_scene(tl, out)
+        compose_scene(tl, timing, out)
 
 
 def test_compose_scene_reads_timeline_fields(
@@ -189,18 +216,22 @@ def test_compose_scene_reads_timeline_fields(
     # Create real WAV and PNG files so _resolve doesn't raise
     wav = tmp_path / "ambient.wav"
     _write_silent_wav(wav, 3.0, channels=2)
-    png = tmp_path / "overlay.png"
+    png = tmp_path / "seg-0.png"
     _write_dummy_png(png)
     mp4 = tmp_path / "motion.mp4"
     mp4.touch()  # just needs to exist for _resolve
 
+    timing = _make_timing_manifest(
+        tmp_path,
+        scene_id="my-scene",
+        segments=[{"seg_id": "seg-0", "start_s": 0.0, "end_s": 3.0, "png": png.name}],
+    )
     tl = _make_timeline(
         tmp_path,
         scene_id="my-scene",
         story_id="my-story",
         duration_s=3.0,
         motion_path=str(mp4),
-        typography_path=str(png),
         audio_tracks=[
             {
                 "track_id": "audio-ambient",
@@ -214,7 +245,7 @@ def test_compose_scene_reads_timeline_fields(
     )
     out = tmp_path / "scene.mp4"
 
-    compose_scene(tl, out)
+    compose_scene(tl, timing, out)
     assert "-t" in captured["cmd"]
     t_idx = captured["cmd"].index("-t")
     assert float(captured["cmd"][t_idx + 1]) == pytest.approx(3.0)
@@ -237,16 +268,20 @@ def test_compose_scene_ffmpeg_command_includes_overlay(
 
     wav = tmp_path / "ambient.wav"
     _write_silent_wav(wav, 2.0, channels=2)
-    png = tmp_path / "overlay.png"
+    png = tmp_path / "seg-0.png"
     _write_dummy_png(png)
     mp4 = tmp_path / "motion.mp4"
     mp4.touch()
 
+    timing = _make_timing_manifest(
+        tmp_path,
+        scene_id="scene-01",
+        segments=[{"seg_id": "seg-0", "start_s": 0.0, "end_s": 2.0, "png": png.name}],
+    )
     tl = _make_timeline(
         tmp_path,
         duration_s=2.0,
         motion_path=str(mp4),
-        typography_path=str(png),
         audio_tracks=[
             {
                 "track_id": "audio-ambient",
@@ -259,7 +294,7 @@ def test_compose_scene_ffmpeg_command_includes_overlay(
         ],
     )
     out = tmp_path / "scene.mp4"
-    compose_scene(tl, out)
+    compose_scene(tl, timing, out)
 
     cmd_str = " ".join(str(c) for c in captured["cmd"])
     assert "overlay" in cmd_str, "FFmpeg command must include 'overlay' filter"
@@ -284,16 +319,20 @@ def test_compose_scene_ffmpeg_command_includes_amix(
     _write_silent_wav(narr, 1.5)
     amb = tmp_path / "ambient.wav"
     _write_silent_wav(amb, 2.0, channels=2)
-    png = tmp_path / "overlay.png"
+    png = tmp_path / "seg-0.png"
     _write_dummy_png(png)
     mp4 = tmp_path / "motion.mp4"
     mp4.touch()
 
+    timing = _make_timing_manifest(
+        tmp_path,
+        scene_id="scene-01",
+        segments=[{"seg_id": "seg-0", "start_s": 0.0, "end_s": 2.0, "png": png.name}],
+    )
     tl = _make_timeline(
         tmp_path,
         duration_s=2.0,
         motion_path=str(mp4),
-        typography_path=str(png),
         audio_tracks=[
             {
                 "track_id": "audio-seg-0",
@@ -314,7 +353,7 @@ def test_compose_scene_ffmpeg_command_includes_amix(
         ],
     )
     out = tmp_path / "scene.mp4"
-    compose_scene(tl, out)
+    compose_scene(tl, timing, out)
 
     cmd_str = " ".join(str(c) for c in captured["cmd"])
     assert "amix" in cmd_str, "FFmpeg command must include 'amix' filter"
@@ -339,16 +378,20 @@ def test_compose_scene_ffmpeg_command_includes_adelay_for_delayed_track(
     _write_silent_wav(dlg, 1.0)
     amb = tmp_path / "ambient.wav"
     _write_silent_wav(amb, 3.0, channels=2)
-    png = tmp_path / "overlay.png"
+    png = tmp_path / "seg-0.png"
     _write_dummy_png(png)
     mp4 = tmp_path / "motion.mp4"
     mp4.touch()
 
+    timing = _make_timing_manifest(
+        tmp_path,
+        scene_id="scene-01",
+        segments=[{"seg_id": "seg-0", "start_s": 0.0, "end_s": 3.0, "png": png.name}],
+    )
     tl = _make_timeline(
         tmp_path,
         duration_s=3.0,
         motion_path=str(mp4),
-        typography_path=str(png),
         audio_tracks=[
             {
                 "track_id": "audio-dlg-0",
@@ -369,7 +412,7 @@ def test_compose_scene_ffmpeg_command_includes_adelay_for_delayed_track(
         ],
     )
     out = tmp_path / "scene.mp4"
-    compose_scene(tl, out)
+    compose_scene(tl, timing, out)
 
     cmd_str = " ".join(str(c) for c in captured["cmd"])
     # 2.0 s delay → 2000 ms
@@ -393,18 +436,22 @@ def test_sidecar_written_after_compose(
 
     wav = tmp_path / "ambient.wav"
     _write_silent_wav(wav, 2.0, channels=2)
-    png = tmp_path / "overlay.png"
+    png = tmp_path / "seg-0.png"
     _write_dummy_png(png)
     mp4 = tmp_path / "motion.mp4"
     mp4.touch()
 
+    timing = _make_timing_manifest(
+        tmp_path,
+        scene_id="s-test",
+        segments=[{"seg_id": "seg-0", "start_s": 0.0, "end_s": 2.0, "png": png.name}],
+    )
     tl = _make_timeline(
         tmp_path,
         scene_id="s-test",
         story_id="test-story",
         duration_s=2.0,
         motion_path=str(mp4),
-        typography_path=str(png),
         audio_tracks=[
             {
                 "track_id": "audio-ambient",
@@ -417,7 +464,7 @@ def test_sidecar_written_after_compose(
         ],
     )
     out = tmp_path / "scene_s-test_composed.mp4"
-    compose_scene(tl, out)
+    compose_scene(tl, timing, out)
 
     sidecar_path = out.with_suffix(".json")
     assert sidecar_path.exists(), "Sidecar JSON must be written alongside the MP4"
@@ -442,17 +489,21 @@ def test_sidecar_schema_valid(
 
     wav = tmp_path / "ambient.wav"
     _write_silent_wav(wav, 1.0, channels=2)
-    png = tmp_path / "overlay.png"
+    png = tmp_path / "seg-0.png"
     _write_dummy_png(png)
     mp4 = tmp_path / "motion.mp4"
     mp4.touch()
 
+    timing = _make_timing_manifest(
+        tmp_path,
+        scene_id="sv",
+        segments=[{"seg_id": "seg-0", "start_s": 0.0, "end_s": 1.0, "png": png.name}],
+    )
     tl = _make_timeline(
         tmp_path,
         scene_id="sv",
         duration_s=1.0,
         motion_path=str(mp4),
-        typography_path=str(png),
         audio_tracks=[
             {
                 "track_id": "audio-ambient",
@@ -465,7 +516,7 @@ def test_sidecar_schema_valid(
         ],
     )
     out = tmp_path / "scene_sv_composed.mp4"
-    compose_scene(tl, out)
+    compose_scene(tl, timing, out)
 
     sidecar = json.loads(out.with_suffix(".json").read_text())
     validate(sidecar, "composed_scene.schema.json")
@@ -490,16 +541,20 @@ def test_sidecar_narration_and_dialogue_wavs_populated(
     _write_silent_wav(dlg, 0.8)
     amb = tmp_path / "ambient.wav"
     _write_silent_wav(amb, 2.5, channels=2)
-    png = tmp_path / "overlay.png"
+    png = tmp_path / "seg-0.png"
     _write_dummy_png(png)
     mp4 = tmp_path / "motion.mp4"
     mp4.touch()
 
+    timing = _make_timing_manifest(
+        tmp_path,
+        scene_id="scene-01",
+        segments=[{"seg_id": "seg-0", "start_s": 0.0, "end_s": 2.5, "png": png.name}],
+    )
     tl = _make_timeline(
         tmp_path,
         duration_s=2.5,
         motion_path=str(mp4),
-        typography_path=str(png),
         audio_tracks=[
             {
                 "track_id": "audio-seg-0",
@@ -528,7 +583,7 @@ def test_sidecar_narration_and_dialogue_wavs_populated(
         ],
     )
     out = tmp_path / "scene_composed.mp4"
-    compose_scene(tl, out)
+    compose_scene(tl, timing, out)
 
     sidecar = json.loads(out.with_suffix(".json").read_text())
     assert len(sidecar["inputs"]["narration_wavs"]) == 1
@@ -552,17 +607,21 @@ def test_sidecar_paths_are_relative(
     run_dir.mkdir()
     wav = run_dir / "ambient.wav"
     _write_silent_wav(wav, 1.0, channels=2)
-    png = run_dir / "overlay.png"
+    png = run_dir / "seg-0.png"
     _write_dummy_png(png)
     mp4 = run_dir / "motion.mp4"
     mp4.touch()
 
+    timing = _make_timing_manifest(
+        run_dir,
+        scene_id="rel-test",
+        segments=[{"seg_id": "seg-0", "start_s": 0.0, "end_s": 1.0, "png": png.name}],
+    )
     tl = _make_timeline(
         run_dir,
         scene_id="rel-test",
         duration_s=1.0,
         motion_path=str(mp4),
-        typography_path=str(png),
         audio_tracks=[
             {
                 "track_id": "audio-ambient",
@@ -575,7 +634,7 @@ def test_sidecar_paths_are_relative(
         ],
     )
     out = run_dir / "scene_rel-test_composed.mp4"
-    compose_scene(tl, out)
+    compose_scene(tl, timing, out)
 
     sidecar = json.loads(out.with_suffix(".json").read_text())
     assert not Path(sidecar["output_path"]).is_absolute(), (
@@ -611,16 +670,20 @@ def test_compose_scene_ffmpeg_command_includes_stereo_upmix(
     _write_silent_wav(narr, 1.5)  # mono (1 channel)
     amb = tmp_path / "ambient.wav"
     _write_silent_wav(amb, 2.0, channels=2)
-    png = tmp_path / "overlay.png"
+    png = tmp_path / "seg-0.png"
     _write_dummy_png(png)
     mp4 = tmp_path / "motion.mp4"
     mp4.touch()
 
+    timing = _make_timing_manifest(
+        tmp_path,
+        scene_id="scene-01",
+        segments=[{"seg_id": "seg-0", "start_s": 0.0, "end_s": 2.0, "png": png.name}],
+    )
     tl = _make_timeline(
         tmp_path,
         duration_s=2.0,
         motion_path=str(mp4),
-        typography_path=str(png),
         audio_tracks=[
             {
                 "track_id": "audio-seg-0",
@@ -641,7 +704,7 @@ def test_compose_scene_ffmpeg_command_includes_stereo_upmix(
         ],
     )
     out = tmp_path / "scene.mp4"
-    compose_scene(tl, out)
+    compose_scene(tl, timing, out)
 
     cmd_str = " ".join(str(c) for c in captured["cmd"])
     assert "aformat=channel_layouts=stereo" in cmd_str, (
@@ -665,16 +728,20 @@ def test_compose_scene_returns_output_path(
 
     wav = tmp_path / "a.wav"
     _write_silent_wav(wav, 1.0, channels=2)
-    png = tmp_path / "o.png"
+    png = tmp_path / "seg-0.png"
     _write_dummy_png(png)
     mp4 = tmp_path / "m.mp4"
     mp4.touch()
 
+    timing = _make_timing_manifest(
+        tmp_path,
+        scene_id="scene-01",
+        segments=[{"seg_id": "seg-0", "start_s": 0.0, "end_s": 1.0, "png": png.name}],
+    )
     tl = _make_timeline(
         tmp_path,
         duration_s=1.0,
         motion_path=str(mp4),
-        typography_path=str(png),
         audio_tracks=[
             {
                 "track_id": "audio-ambient",
@@ -687,8 +754,211 @@ def test_compose_scene_returns_output_path(
         ],
     )
     out = tmp_path / "result.mp4"
-    result = compose_scene(tl, out)
+    result = compose_scene(tl, timing, out)
     assert result == out
+
+
+# ---------------------------------------------------------------------------
+# New tests for Issue #024 — per-segment overlay chain
+# ---------------------------------------------------------------------------
+
+
+def test_compose_scene_3seg_overlay_chain(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """3-segment timing manifest → 3 overlay filters in FFmpeg command."""
+    captured: dict[str, Any] = {}
+
+    def fake_run(cmd: Any, **kwargs: Any) -> Any:
+        captured["cmd"] = list(cmd)
+        for part in cmd:
+            if isinstance(part, str) and part.endswith(".tmp.mp4"):
+                Path(part).touch()
+
+    monkeypatch.setattr("horror_story.pipeline.compositor.ffmpeg_available", lambda: True)
+    monkeypatch.setattr("subprocess.run", fake_run)
+
+    # Create 3 PNG files
+    pngs = []
+    for i in range(3):
+        p = tmp_path / f"seg-{i}.png"
+        _write_dummy_png(p)
+        pngs.append(p)
+
+    amb = tmp_path / "ambient.wav"
+    _write_silent_wav(amb, 7.0, channels=2)
+    mp4 = tmp_path / "motion.mp4"
+    mp4.touch()
+
+    timing = _make_timing_manifest(
+        tmp_path,
+        scene_id="scene-01",
+        segments=[
+            {"seg_id": "seg-0", "start_s": 0.0, "end_s": 2.0, "png": pngs[0].name},
+            {"seg_id": "seg-1", "start_s": 2.0, "end_s": 4.5, "png": pngs[1].name},
+            {"seg_id": "seg-2", "start_s": 4.5, "end_s": 7.0, "png": pngs[2].name},
+        ],
+    )
+    tl = _make_timeline(
+        tmp_path,
+        duration_s=7.0,
+        motion_path=str(mp4),
+        audio_tracks=[
+            {
+                "track_id": "audio-ambient",
+                "track_type": "ambient",
+                "source_path": str(amb),
+                "start_s": 0.0,
+                "end_s": 7.0,
+                "line_ref": "ambient",
+            }
+        ],
+    )
+    out = tmp_path / "scene.mp4"
+    compose_scene(tl, timing, out)
+
+    cmd = captured["cmd"]
+    cmd_str = " ".join(str(c) for c in cmd)
+
+    # Assert -i for each of the 3 PNGs
+    for png in pngs:
+        assert str(png) in cmd_str, f"Expected PNG {png} in FFmpeg cmd"
+
+    # Assert 3 overlay calls in filter_complex
+    fc_idx = cmd.index("-filter_complex")
+    filter_complex: str = cmd[fc_idx + 1]
+    overlay_count = filter_complex.count("overlay=")
+    assert overlay_count == 3, (
+        f"Expected 3 overlay= in filter_complex, got {overlay_count}:\n{filter_complex}"
+    )
+
+    # Assert audio base_input_idx is 4 (1 + 3 segments)
+    # The first audio input should be at index 4
+    # Check adelay references input [4:a]
+    assert "[4:a]" in filter_complex, (
+        f"Expected audio base_input_idx=4 ([4:a]) in filter_complex:\n{filter_complex}"
+    )
+
+
+def test_compose_scene_enable_expressions(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Each overlay must have correct between(t,...) enable expression."""
+    captured: dict[str, Any] = {}
+
+    def fake_run(cmd: Any, **kwargs: Any) -> Any:
+        captured["cmd"] = list(cmd)
+        for part in cmd:
+            if isinstance(part, str) and part.endswith(".tmp.mp4"):
+                Path(part).touch()
+
+    monkeypatch.setattr("horror_story.pipeline.compositor.ffmpeg_available", lambda: True)
+    monkeypatch.setattr("subprocess.run", fake_run)
+
+    png0 = tmp_path / "seg-0.png"
+    _write_dummy_png(png0)
+    png1 = tmp_path / "seg-1.png"
+    _write_dummy_png(png1)
+
+    amb = tmp_path / "ambient.wav"
+    _write_silent_wav(amb, 6.5, channels=2)
+    mp4 = tmp_path / "motion.mp4"
+    mp4.touch()
+
+    timing = _make_timing_manifest(
+        tmp_path,
+        scene_id="scene-01",
+        segments=[
+            {"seg_id": "seg-0", "start_s": 0.0, "end_s": 3.2, "png": png0.name},
+            {"seg_id": "seg-1", "start_s": 3.2, "end_s": 6.5, "png": png1.name},
+        ],
+    )
+    tl = _make_timeline(
+        tmp_path,
+        duration_s=6.5,
+        motion_path=str(mp4),
+        audio_tracks=[
+            {
+                "track_id": "audio-ambient",
+                "track_type": "ambient",
+                "source_path": str(amb),
+                "start_s": 0.0,
+                "end_s": 6.5,
+                "line_ref": "ambient",
+            }
+        ],
+    )
+    out = tmp_path / "scene.mp4"
+    compose_scene(tl, timing, out)
+
+    fc_idx = captured["cmd"].index("-filter_complex")
+    filter_complex: str = captured["cmd"][fc_idx + 1]
+
+    assert "between(t,0.0,3.2)" in filter_complex, (
+        f"Expected between(t,0.0,3.2) in filter_complex:\n{filter_complex}"
+    )
+    assert "between(t,3.2,6.5)" in filter_complex, (
+        f"Expected between(t,3.2,6.5) in filter_complex:\n{filter_complex}"
+    )
+
+
+def test_compose_scene_fade_alpha_in_filter(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Overlay filters must include alpha fade expressions."""
+    captured: dict[str, Any] = {}
+
+    def fake_run(cmd: Any, **kwargs: Any) -> Any:
+        captured["cmd"] = list(cmd)
+        for part in cmd:
+            if isinstance(part, str) and part.endswith(".tmp.mp4"):
+                Path(part).touch()
+
+    monkeypatch.setattr("horror_story.pipeline.compositor.ffmpeg_available", lambda: True)
+    monkeypatch.setattr("subprocess.run", fake_run)
+
+    png = tmp_path / "seg-0.png"
+    _write_dummy_png(png)
+    amb = tmp_path / "ambient.wav"
+    _write_silent_wav(amb, 3.0, channels=2)
+    mp4 = tmp_path / "motion.mp4"
+    mp4.touch()
+
+    timing = _make_timing_manifest(
+        tmp_path,
+        scene_id="scene-01",
+        segments=[{"seg_id": "seg-0", "start_s": 0.0, "end_s": 3.0, "png": png.name}],
+    )
+    tl = _make_timeline(
+        tmp_path,
+        duration_s=3.0,
+        motion_path=str(mp4),
+        audio_tracks=[
+            {
+                "track_id": "audio-ambient",
+                "track_type": "ambient",
+                "source_path": str(amb),
+                "start_s": 0.0,
+                "end_s": 3.0,
+                "line_ref": "ambient",
+            }
+        ],
+    )
+    out = tmp_path / "scene.mp4"
+    compose_scene(tl, timing, out)
+
+    fc_idx = captured["cmd"].index("-filter_complex")
+    filter_complex: str = captured["cmd"][fc_idx + 1]
+
+    assert "alpha=1" in filter_complex, (
+        f"Expected alpha=1 fade expression in filter_complex:\n{filter_complex}"
+    )
+    assert "fade=t=in" in filter_complex, (
+        f"Expected fade=t=in expression in filter_complex:\n{filter_complex}"
+    )
+    assert "fade=t=out" in filter_complex, (
+        f"Expected fade=t=out expression in filter_complex:\n{filter_complex}"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -702,11 +972,10 @@ def test_integration_full_scene_pipeline(tmp_path: Path) -> None:
 
     Stages run:
       parse → script → TTS (mock) → image (mock) → motion (mock, FFmpeg)
-      → audio (mock) → typography (mock) → timeline → compositor (FFmpeg)
+      → audio (mock) → timeline → typography (mock) → compositor (FFmpeg)
 
     Asserts a valid MP4 file is produced.
     """
-    import shutil
     from horror_story.adapters import AdapterFactory
     from horror_story.pipeline.parse import parse_story
     from horror_story.pipeline.script import generate_script
@@ -826,34 +1095,34 @@ def test_integration_full_scene_pipeline(tmp_path: Path) -> None:
     )
     ambient_sidecar = ambient_wav.with_suffix(".json")
 
-    # Stage 7: typography
-    typography = AdapterFactory.get_typography("mock")
-    typo_png = tmp_path / f"typography_{scene_id}.png"
-    typography.render(
-        script_path=script_path,
-        duration_s=duration_s,
-        width=320,
-        height=240,
-        fps=fps,
-        seed=manifest.seed,
-        out_path=typo_png,
-    )
-    typography_sidecar = typo_png.with_suffix(".json")
-
-    # Stage 7.5: timeline
+    # Stage 7: timeline (no typography_sidecar_path — now optional)
     timeline_path = tmp_path / f"timeline_{scene_id}.json"
     plan_timeline(
         script_path=script_path,
         motion_sidecar_path=motion_sidecar,
         ambient_sidecar_path=ambient_sidecar,
-        typography_sidecar_path=typography_sidecar,
         voice_line_sidecar_paths=tts_sidecars,
         out_path=timeline_path,
     )
 
+    # Stage 8: typography (per-segment PNGs + timing manifest)
+    out_timing = tmp_path / f"typography_{scene_id}_timing.json"
+    typography = AdapterFactory.get_typography("mock")
+    timeline_data = json.loads(timeline_path.read_text())
+    typography.render(
+        script=json.loads(script_path.read_text()),
+        timeline=timeline_data,
+        scene_id=scene_id,
+        seed=manifest.seed,
+        out_dir=tmp_path,
+        out_timing=out_timing,
+        width=320,
+        height=240,
+    )
+
     # Stage 8: compositor
     composed_mp4 = tmp_path / f"scene_{scene_id}_composed.mp4"
-    result = compose_scene(timeline_path, composed_mp4)
+    result = compose_scene(timeline_path, out_timing, composed_mp4)
 
     # Assertions
     assert result == composed_mp4

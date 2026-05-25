@@ -1,4 +1,4 @@
-"""Tests for Issue #006 — Mock Typography overlay adapter."""
+"""Tests for Issue #023 — Per-segment typography adapter."""
 from __future__ import annotations
 
 import json
@@ -16,7 +16,7 @@ from horror_story.adapters.typography.mock import MockTypographyAdapter
 from horror_story.schemas import validate
 
 # ---------------------------------------------------------------------------
-# Fixtures
+# Script fixtures
 # ---------------------------------------------------------------------------
 
 _SCRIPT_MINIMAL = {
@@ -63,11 +63,74 @@ _SCRIPT_WITH_DIALOGUE = {
     "total_duration_ms": 2500,
 }
 
+_SCRIPT_THREE_SEGMENTS = {
+    "schema_version": "1.0",
+    "story_id": "pigeons-from-hell",
+    "scene_id": "scene-03",
+    "segments": [
+        {
+            "segment_id": "seg-0",
+            "text_en": "First segment.",
+            "text_secondary": "[uk] first",
+            "pacing_ms": 1000,
+            "voice_id": "en-narrator-01",
+        },
+        {
+            "segment_id": "seg-1",
+            "text_en": "Second segment.",
+            "text_secondary": "[uk] second",
+            "pacing_ms": 1500,
+            "voice_id": "en-narrator-01",
+        },
+        {
+            "segment_id": "seg-2",
+            "text_en": "Third segment.",
+            "text_secondary": "[uk] third",
+            "pacing_ms": 2000,
+            "voice_id": "en-narrator-01",
+        },
+    ],
+    "dialogue_lines": [],
+    "total_duration_ms": 4500,
+}
+
 
 def _write_script(tmp_path: Path, data: dict) -> Path:  # type: ignore[type-arg]
     p = tmp_path / "script.json"
     p.write_text(json.dumps(data))
     return p
+
+
+# ---------------------------------------------------------------------------
+# Timeline helper fixtures
+# ---------------------------------------------------------------------------
+
+
+def _make_minimal_timeline(scene_id: str, segments: list[dict]) -> dict:  # type: ignore[type-arg]
+    """Build a minimal timeline dict with narration audio tracks."""
+    cursor = 0.0
+    tracks = []
+    for i, seg in enumerate(segments):
+        dur = seg["pacing_ms"] / 1000.0
+        tracks.append({
+            "track_id": f"audio-{seg['segment_id']}",
+            "track_type": "narration",
+            "source_path": f"audio/narration_{scene_id}_{seg['segment_id']}.wav",
+            "start_s": round(cursor, 6),
+            "end_s": round(cursor + dur, 6),
+            "line_ref": seg["segment_id"],
+        })
+        cursor += dur
+    return {
+        "schema_version": "1.0",
+        "story_id": "pigeons-from-hell",
+        "scene_id": scene_id,
+        "duration_s": cursor,
+        "fps": 24,
+        "video_tracks": [],
+        "audio_tracks": tracks,
+        "overlay_tracks": [],
+    }
 
 
 # ---------------------------------------------------------------------------
@@ -87,70 +150,86 @@ def test_typography_adapter_is_abstract() -> None:
 
 def test_mock_typography_writes_png(tmp_path: Path) -> None:
     adapter = MockTypographyAdapter()
-    script_path = _write_script(tmp_path, _SCRIPT_MINIMAL)
-    out = tmp_path / "overlay.png"
+    scene_id = "scene-01"
+    script_data = _SCRIPT_MINIMAL
+    timeline = _make_minimal_timeline(scene_id, script_data["segments"])
+    out_timing = tmp_path / f"typography_{scene_id}_timing.json"
     result = adapter.render(
-        script_path=script_path,
-        duration_s=2.0,
+        script=script_data,
+        timeline=timeline,
+        scene_id=scene_id,
+        seed=42,
+        out_dir=tmp_path,
+        out_timing=out_timing,
         width=640,
         height=480,
-        fps=24,
-        seed=42,
-        out_path=out,
     )
-    assert result == out
-    assert out.exists()
+    # result is the timing manifest path
+    assert result == out_timing
+    assert out_timing.exists()
+    # The PNG for segment 0 must exist
+    png = tmp_path / f"typography_{scene_id}_seg-0.png"
+    assert png.exists()
 
 
 def test_mock_typography_png_is_rgba(tmp_path: Path) -> None:
     adapter = MockTypographyAdapter()
-    script_path = _write_script(tmp_path, _SCRIPT_MINIMAL)
-    out = tmp_path / "overlay.png"
+    scene_id = "scene-01"
+    timeline = _make_minimal_timeline(scene_id, _SCRIPT_MINIMAL["segments"])
+    out_timing = tmp_path / f"typography_{scene_id}_timing.json"
     adapter.render(
-        script_path=script_path,
-        duration_s=2.0,
+        script=_SCRIPT_MINIMAL,
+        timeline=timeline,
+        scene_id=scene_id,
+        seed=1,
+        out_dir=tmp_path,
+        out_timing=out_timing,
         width=640,
         height=480,
-        fps=24,
-        seed=1,
-        out_path=out,
     )
-    with Image.open(out) as img:
+    png = tmp_path / f"typography_{scene_id}_seg-0.png"
+    with Image.open(png) as img:
         assert img.mode == "RGBA"
 
 
 def test_mock_typography_png_correct_dimensions(tmp_path: Path) -> None:
     adapter = MockTypographyAdapter()
-    script_path = _write_script(tmp_path, _SCRIPT_MINIMAL)
-    out = tmp_path / "overlay.png"
+    scene_id = "scene-01"
+    timeline = _make_minimal_timeline(scene_id, _SCRIPT_MINIMAL["segments"])
+    out_timing = tmp_path / f"typography_{scene_id}_timing.json"
     adapter.render(
-        script_path=script_path,
-        duration_s=2.0,
+        script=_SCRIPT_MINIMAL,
+        timeline=timeline,
+        scene_id=scene_id,
+        seed=1,
+        out_dir=tmp_path,
+        out_timing=out_timing,
         width=640,
         height=480,
-        fps=24,
-        seed=1,
-        out_path=out,
     )
-    with Image.open(out) as img:
+    png = tmp_path / f"typography_{scene_id}_seg-0.png"
+    with Image.open(png) as img:
         assert img.size == (640, 480)
 
 
 def test_mock_typography_png_has_transparency(tmp_path: Path) -> None:
     """At least one pixel must be fully transparent (alpha == 0)."""
     adapter = MockTypographyAdapter()
-    script_path = _write_script(tmp_path, _SCRIPT_MINIMAL)
-    out = tmp_path / "overlay.png"
+    scene_id = "scene-01"
+    timeline = _make_minimal_timeline(scene_id, _SCRIPT_MINIMAL["segments"])
+    out_timing = tmp_path / f"typography_{scene_id}_timing.json"
     adapter.render(
-        script_path=script_path,
-        duration_s=2.0,
+        script=_SCRIPT_MINIMAL,
+        timeline=timeline,
+        scene_id=scene_id,
+        seed=5,
+        out_dir=tmp_path,
+        out_timing=out_timing,
         width=320,
         height=240,
-        fps=24,
-        seed=5,
-        out_path=out,
     )
-    with Image.open(out) as img:
+    png = tmp_path / f"typography_{scene_id}_seg-0.png"
+    with Image.open(png) as img:
         extrema = img.getextrema()
         # extrema for RGBA is ((r_min, r_max), (g_min, g_max), (b_min, b_max), (a_min, a_max))
         alpha_min = extrema[3][0]
@@ -160,18 +239,21 @@ def test_mock_typography_png_has_transparency(tmp_path: Path) -> None:
 def test_mock_typography_text_visible(tmp_path: Path) -> None:
     """At least one opaque white pixel somewhere in the image (adaptive-zones layout)."""
     adapter = MockTypographyAdapter()
-    script_path = _write_script(tmp_path, _SCRIPT_MINIMAL)
-    out = tmp_path / "overlay.png"
+    scene_id = "scene-01"
+    timeline = _make_minimal_timeline(scene_id, _SCRIPT_MINIMAL["segments"])
+    out_timing = tmp_path / f"typography_{scene_id}_timing.json"
     adapter.render(
-        script_path=script_path,
-        duration_s=2.0,
+        script=_SCRIPT_MINIMAL,
+        timeline=timeline,
+        scene_id=scene_id,
+        seed=7,
+        out_dir=tmp_path,
+        out_timing=out_timing,
         width=640,
         height=480,
-        fps=24,
-        seed=7,
-        out_path=out,
     )
-    with Image.open(out) as img:
+    png = tmp_path / f"typography_{scene_id}_seg-0.png"
+    with Image.open(png) as img:
         pixels = list(img.getdata())
         white_pixels = [p for p in pixels if p[0] >= 200 and p[3] == 255]
         assert len(white_pixels) > 0, "EN text should render white pixels"
@@ -180,18 +262,21 @@ def test_mock_typography_text_visible(tmp_path: Path) -> None:
 def test_mock_typography_secondary_text_visible(tmp_path: Path) -> None:
     """Secondary language text renders some non-transparent pixels."""
     adapter = MockTypographyAdapter()
-    script_path = _write_script(tmp_path, _SCRIPT_MINIMAL)
-    out = tmp_path / "overlay.png"
+    scene_id = "scene-01"
+    timeline = _make_minimal_timeline(scene_id, _SCRIPT_MINIMAL["segments"])
+    out_timing = tmp_path / f"typography_{scene_id}_timing.json"
     adapter.render(
-        script_path=script_path,
-        duration_s=2.0,
+        script=_SCRIPT_MINIMAL,
+        timeline=timeline,
+        scene_id=scene_id,
+        seed=7,
+        out_dir=tmp_path,
+        out_timing=out_timing,
         width=640,
         height=480,
-        fps=24,
-        seed=7,
-        out_path=out,
     )
-    with Image.open(out) as img:
+    png = tmp_path / f"typography_{scene_id}_seg-0.png"
+    with Image.open(png) as img:
         pixels = list(img.getdata())
         opaque_pixels = [p for p in pixels if p[3] > 0]
         assert len(opaque_pixels) > 0, "Secondary text area must have visible pixels"
@@ -200,19 +285,22 @@ def test_mock_typography_secondary_text_visible(tmp_path: Path) -> None:
 def test_mock_typography_dialogue_included(tmp_path: Path) -> None:
     """Script with dialogue also renders without error and produces valid PNG."""
     adapter = MockTypographyAdapter()
-    script_path = _write_script(tmp_path, _SCRIPT_WITH_DIALOGUE)
-    out = tmp_path / "overlay_dlg.png"
+    scene_id = "scene-02"
+    timeline = _make_minimal_timeline(scene_id, _SCRIPT_WITH_DIALOGUE["segments"])
+    out_timing = tmp_path / f"typography_{scene_id}_timing.json"
     adapter.render(
-        script_path=script_path,
-        duration_s=2.5,
+        script=_SCRIPT_WITH_DIALOGUE,
+        timeline=timeline,
+        scene_id=scene_id,
+        seed=10,
+        out_dir=tmp_path,
+        out_timing=out_timing,
         width=640,
         height=480,
-        fps=24,
-        seed=10,
-        out_path=out,
     )
-    assert out.exists()
-    with Image.open(out) as img:
+    png = tmp_path / f"typography_{scene_id}_seg-0.png"
+    assert png.exists()
+    with Image.open(png) as img:
         assert img.mode == "RGBA"
         assert img.size == (640, 480)
 
@@ -224,126 +312,204 @@ def test_mock_typography_dialogue_included(tmp_path: Path) -> None:
 
 def test_mock_typography_deterministic_bytes(tmp_path: Path) -> None:
     adapter = MockTypographyAdapter()
-    script_path = _write_script(tmp_path, _SCRIPT_MINIMAL)
-    out1 = tmp_path / "run1.png"
-    out2 = tmp_path / "run2.png"
+    scene_id = "scene-01"
+    timeline = _make_minimal_timeline(scene_id, _SCRIPT_MINIMAL["segments"])
+    out1 = tmp_path / "run1" / f"typography_{scene_id}_timing.json"
+    out2 = tmp_path / "run2" / f"typography_{scene_id}_timing.json"
+    out1.parent.mkdir()
+    out2.parent.mkdir()
     kwargs = dict(
-        script_path=script_path,
-        duration_s=2.0,
+        script=_SCRIPT_MINIMAL,
+        timeline=timeline,
+        scene_id=scene_id,
+        seed=42,
         width=320,
         height=240,
-        fps=24,
-        seed=42,
     )
-    adapter.render(**kwargs, out_path=out1)  # type: ignore[arg-type]
-    adapter.render(**kwargs, out_path=out2)  # type: ignore[arg-type]
-    assert out1.read_bytes() == out2.read_bytes()
+    adapter.render(**kwargs, out_dir=out1.parent, out_timing=out1)  # type: ignore[arg-type]
+    adapter.render(**kwargs, out_dir=out2.parent, out_timing=out2)  # type: ignore[arg-type]
+    png1 = out1.parent / f"typography_{scene_id}_seg-0.png"
+    png2 = out2.parent / f"typography_{scene_id}_seg-0.png"
+    assert png1.read_bytes() == png2.read_bytes()
 
 
-def test_mock_typography_deterministic_sidecar(tmp_path: Path) -> None:
+def test_mock_typography_deterministic_timing_manifest(tmp_path: Path) -> None:
     adapter = MockTypographyAdapter()
-    script_path = _write_script(tmp_path, _SCRIPT_MINIMAL)
-    out1 = tmp_path / "run1.png"
-    out2 = tmp_path / "run2.png"
+    scene_id = "scene-01"
+    timeline = _make_minimal_timeline(scene_id, _SCRIPT_MINIMAL["segments"])
+    out1 = tmp_path / "run1" / f"typography_{scene_id}_timing.json"
+    out2 = tmp_path / "run2" / f"typography_{scene_id}_timing.json"
+    out1.parent.mkdir()
+    out2.parent.mkdir()
     kwargs = dict(
-        script_path=script_path,
-        duration_s=2.0,
-        width=320,
-        height=240,
-        fps=24,
+        script=_SCRIPT_MINIMAL,
+        timeline=timeline,
+        scene_id=scene_id,
         seed=42,
-    )
-    adapter.render(**kwargs, out_path=out1)  # type: ignore[arg-type]
-    adapter.render(**kwargs, out_path=out2)  # type: ignore[arg-type]
-    j1 = json.loads(out1.with_suffix(".json").read_text())
-    j2 = json.loads(out2.with_suffix(".json").read_text())
-    for key in ("schema_version", "story_id", "scene_id", "duration_s", "width", "height", "fps", "seed", "adapter", "status"):
-        assert j1[key] == j2[key], f"sidecar field {key!r} differs"
-
-
-def test_mock_typography_different_seeds_differ(tmp_path: Path) -> None:
-    adapter = MockTypographyAdapter()
-    script_path = _write_script(tmp_path, _SCRIPT_MINIMAL)
-    out1 = tmp_path / "seed1.png"
-    out2 = tmp_path / "seed2.png"
-    base = dict(
-        script_path=script_path,
-        duration_s=2.0,
         width=320,
         height=240,
-        fps=24,
     )
-    adapter.render(**base, seed=1, out_path=out1)  # type: ignore[arg-type]
-    adapter.render(**base, seed=200, out_path=out2)  # type: ignore[arg-type]
-    # Sidecar seeds differ; PNG bytes may or may not (mock doesn't use seed for pixels)
-    j1 = json.loads(out1.with_suffix(".json").read_text())
-    j2 = json.loads(out2.with_suffix(".json").read_text())
-    assert j1["seed"] != j2["seed"]
+    adapter.render(**kwargs, out_dir=out1.parent, out_timing=out1)  # type: ignore[arg-type]
+    adapter.render(**kwargs, out_dir=out2.parent, out_timing=out2)  # type: ignore[arg-type]
+    j1 = json.loads(out1.read_text())
+    j2 = json.loads(out2.read_text())
+    for key in ("schema_version", "scene_id"):
+        assert j1[key] == j2[key], f"timing manifest field {key!r} differs"
+    assert len(j1["segments"]) == len(j2["segments"])
+    for s1, s2 in zip(j1["segments"], j2["segments"]):
+        for field in ("seg_id", "start_s", "end_s", "text_en", "text_uk"):
+            assert s1[field] == s2[field], f"segment field {field!r} differs"
 
 
 # ---------------------------------------------------------------------------
-# Sidecar JSON
+# Timing manifest content
 # ---------------------------------------------------------------------------
 
 
-def test_mock_typography_sidecar_exists(tmp_path: Path) -> None:
+def test_timing_manifest_has_correct_start_end(tmp_path: Path) -> None:
+    """start_s / end_s in timing manifest must match input timeline audio_tracks."""
     adapter = MockTypographyAdapter()
-    script_path = _write_script(tmp_path, _SCRIPT_MINIMAL)
-    out = tmp_path / "overlay.png"
+    scene_id = "scene-01"
+    timeline = _make_minimal_timeline(scene_id, _SCRIPT_MINIMAL["segments"])
+    out_timing = tmp_path / f"typography_{scene_id}_timing.json"
     adapter.render(
-        script_path=script_path,
-        duration_s=2.0,
+        script=_SCRIPT_MINIMAL,
+        timeline=timeline,
+        scene_id=scene_id,
+        seed=42,
+        out_dir=tmp_path,
+        out_timing=out_timing,
         width=640,
-        height=360,
-        fps=24,
-        seed=5,
-        out_path=out,
+        height=480,
     )
-    assert out.with_suffix(".json").exists()
+    timing = json.loads(out_timing.read_text())
+    assert len(timing["segments"]) == 1
+    seg = timing["segments"][0]
+    narr_track = timeline["audio_tracks"][0]
+    assert seg["start_s"] == pytest.approx(narr_track["start_s"])
+    assert seg["end_s"] == pytest.approx(narr_track["end_s"])
 
 
-def test_mock_typography_sidecar_validates_schema(tmp_path: Path) -> None:
+def test_timing_manifest_validates_schema(tmp_path: Path) -> None:
     adapter = MockTypographyAdapter()
-    script_path = _write_script(tmp_path, _SCRIPT_MINIMAL)
-    out = tmp_path / "overlay.png"
+    scene_id = "scene-01"
+    timeline = _make_minimal_timeline(scene_id, _SCRIPT_MINIMAL["segments"])
+    out_timing = tmp_path / f"typography_{scene_id}_timing.json"
     adapter.render(
-        script_path=script_path,
-        duration_s=2.0,
-        width=640,
-        height=360,
-        fps=24,
+        script=_SCRIPT_MINIMAL,
+        timeline=timeline,
+        scene_id=scene_id,
         seed=99,
-        out_path=out,
-    )
-    data = json.loads(out.with_suffix(".json").read_text())
-    validate(data, "typography_artifact.schema.json")
-
-
-def test_mock_typography_sidecar_fields(tmp_path: Path) -> None:
-    adapter = MockTypographyAdapter()
-    script_path = _write_script(tmp_path, _SCRIPT_MINIMAL)
-    out = tmp_path / "overlay.png"
-    adapter.render(
-        script_path=script_path,
-        duration_s=3.5,
+        out_dir=tmp_path,
+        out_timing=out_timing,
         width=640,
         height=360,
-        fps=24,
-        seed=33,
-        out_path=out,
     )
-    data = json.loads(out.with_suffix(".json").read_text())
+    timing = json.loads(out_timing.read_text())
+    validate(timing, "typography_timing.schema.json")
+
+
+def test_timing_manifest_fields(tmp_path: Path) -> None:
+    adapter = MockTypographyAdapter()
+    scene_id = "scene-01"
+    timeline = _make_minimal_timeline(scene_id, _SCRIPT_MINIMAL["segments"])
+    out_timing = tmp_path / f"typography_{scene_id}_timing.json"
+    adapter.render(
+        script=_SCRIPT_MINIMAL,
+        timeline=timeline,
+        scene_id=scene_id,
+        seed=33,
+        out_dir=tmp_path,
+        out_timing=out_timing,
+        width=640,
+        height=360,
+    )
+    data = json.loads(out_timing.read_text())
     assert data["schema_version"] == "1.0"
-    assert data["story_id"] == "pigeons-from-hell"
     assert data["scene_id"] == "scene-01"
-    assert data["duration_s"] == 3.5
-    assert data["width"] == 640
-    assert data["height"] == 360
-    assert data["fps"] == 24
-    assert data["seed"] == 33
-    assert data["adapter"] == "mock"
-    assert data["status"] == "generated"
-    assert data["error"] is None
+    assert isinstance(data["segments"], list)
+    assert len(data["segments"]) == 1
+    seg = data["segments"][0]
+    assert seg["seg_id"] == "seg-0"
+    assert seg["text_en"] == "The house loomed against the storm-grey sky."
+    assert "text_uk" in seg
+    assert seg["png"] == f"typography_{scene_id}_seg-0.png"
+
+
+# ---------------------------------------------------------------------------
+# N segments → N PNGs + 1 timing manifest
+# ---------------------------------------------------------------------------
+
+
+def test_n_segments_n_pngs_one_timing_manifest(tmp_path: Path) -> None:
+    """With a 3-segment script/timeline, 3 PNGs exist and timing has 3 entries."""
+    adapter = MockTypographyAdapter()
+    scene_id = "scene-03"
+    timeline = _make_minimal_timeline(scene_id, _SCRIPT_THREE_SEGMENTS["segments"])
+    out_timing = tmp_path / f"typography_{scene_id}_timing.json"
+    adapter.render(
+        script=_SCRIPT_THREE_SEGMENTS,
+        timeline=timeline,
+        scene_id=scene_id,
+        seed=7,
+        out_dir=tmp_path,
+        out_timing=out_timing,
+        width=640,
+        height=480,
+    )
+    for i in range(3):
+        png = tmp_path / f"typography_{scene_id}_seg-{i}.png"
+        assert png.exists(), f"PNG for segment {i} must exist"
+    timing = json.loads(out_timing.read_text())
+    assert len(timing["segments"]) == 3
+
+
+def test_three_segment_timing_start_end_values(tmp_path: Path) -> None:
+    """start_s/end_s from timeline propagate correctly to all 3 segments."""
+    adapter = MockTypographyAdapter()
+    scene_id = "scene-03"
+    segments = _SCRIPT_THREE_SEGMENTS["segments"]
+    timeline = _make_minimal_timeline(scene_id, segments)
+    out_timing = tmp_path / f"typography_{scene_id}_timing.json"
+    adapter.render(
+        script=_SCRIPT_THREE_SEGMENTS,
+        timeline=timeline,
+        scene_id=scene_id,
+        seed=7,
+        out_dir=tmp_path,
+        out_timing=out_timing,
+        width=640,
+        height=480,
+    )
+    timing = json.loads(out_timing.read_text())
+    narr_tracks = [tr for tr in timeline["audio_tracks"] if tr["track_type"] == "narration"]
+    for i, (seg_entry, narr_track) in enumerate(zip(timing["segments"], narr_tracks)):
+        assert seg_entry["start_s"] == pytest.approx(narr_track["start_s"]), (
+            f"segment {i} start_s mismatch"
+        )
+        assert seg_entry["end_s"] == pytest.approx(narr_track["end_s"]), (
+            f"segment {i} end_s mismatch"
+        )
+
+
+def test_three_segment_schema_valid(tmp_path: Path) -> None:
+    """Timing manifest with 3 segments must validate against typography_timing.schema.json."""
+    adapter = MockTypographyAdapter()
+    scene_id = "scene-03"
+    timeline = _make_minimal_timeline(scene_id, _SCRIPT_THREE_SEGMENTS["segments"])
+    out_timing = tmp_path / f"typography_{scene_id}_timing.json"
+    adapter.render(
+        script=_SCRIPT_THREE_SEGMENTS,
+        timeline=timeline,
+        scene_id=scene_id,
+        seed=7,
+        out_dir=tmp_path,
+        out_timing=out_timing,
+        width=640,
+        height=480,
+    )
+    timing = json.loads(out_timing.read_text())
+    validate(timing, "typography_timing.schema.json")
 
 
 # ---------------------------------------------------------------------------
@@ -353,90 +519,52 @@ def test_mock_typography_sidecar_fields(tmp_path: Path) -> None:
 
 def test_mock_typography_rejects_small_width(tmp_path: Path) -> None:
     adapter = MockTypographyAdapter()
-    script_path = _write_script(tmp_path, _SCRIPT_MINIMAL)
+    scene_id = "scene-01"
+    timeline = _make_minimal_timeline(scene_id, _SCRIPT_MINIMAL["segments"])
     with pytest.raises(ValueError, match="width"):
         adapter.render(
-            script_path=script_path,
-            duration_s=2.0,
+            script=_SCRIPT_MINIMAL,
+            timeline=timeline,
+            scene_id=scene_id,
+            seed=0,
+            out_dir=tmp_path,
+            out_timing=tmp_path / f"typography_{scene_id}_timing.json",
             width=100,
             height=480,
-            fps=24,
-            seed=0,
-            out_path=tmp_path / "out.png",
         )
 
 
 def test_mock_typography_rejects_small_height(tmp_path: Path) -> None:
     adapter = MockTypographyAdapter()
-    script_path = _write_script(tmp_path, _SCRIPT_MINIMAL)
+    scene_id = "scene-01"
+    timeline = _make_minimal_timeline(scene_id, _SCRIPT_MINIMAL["segments"])
     with pytest.raises(ValueError, match="height"):
         adapter.render(
-            script_path=script_path,
-            duration_s=2.0,
+            script=_SCRIPT_MINIMAL,
+            timeline=timeline,
+            scene_id=scene_id,
+            seed=0,
+            out_dir=tmp_path,
+            out_timing=tmp_path / f"typography_{scene_id}_timing.json",
             width=640,
             height=100,
-            fps=24,
-            seed=0,
-            out_path=tmp_path / "out.png",
-        )
-
-
-def test_mock_typography_rejects_negative_duration(tmp_path: Path) -> None:
-    adapter = MockTypographyAdapter()
-    script_path = _write_script(tmp_path, _SCRIPT_MINIMAL)
-    with pytest.raises(ValueError, match="duration_s"):
-        adapter.render(
-            script_path=script_path,
-            duration_s=-1.0,
-            width=640,
-            height=480,
-            fps=24,
-            seed=0,
-            out_path=tmp_path / "out.png",
-        )
-
-
-def test_mock_typography_rejects_zero_fps(tmp_path: Path) -> None:
-    adapter = MockTypographyAdapter()
-    script_path = _write_script(tmp_path, _SCRIPT_MINIMAL)
-    with pytest.raises(ValueError, match="fps"):
-        adapter.render(
-            script_path=script_path,
-            duration_s=2.0,
-            width=640,
-            height=480,
-            fps=0,
-            seed=0,
-            out_path=tmp_path / "out.png",
         )
 
 
 def test_mock_typography_rejects_negative_seed(tmp_path: Path) -> None:
     adapter = MockTypographyAdapter()
-    script_path = _write_script(tmp_path, _SCRIPT_MINIMAL)
+    scene_id = "scene-01"
+    timeline = _make_minimal_timeline(scene_id, _SCRIPT_MINIMAL["segments"])
     with pytest.raises(ValueError, match="seed"):
         adapter.render(
-            script_path=script_path,
-            duration_s=2.0,
-            width=640,
-            height=480,
-            fps=24,
+            script=_SCRIPT_MINIMAL,
+            timeline=timeline,
+            scene_id=scene_id,
             seed=-1,
-            out_path=tmp_path / "out.png",
-        )
-
-
-def test_mock_typography_rejects_missing_script(tmp_path: Path) -> None:
-    adapter = MockTypographyAdapter()
-    with pytest.raises(FileNotFoundError):
-        adapter.render(
-            script_path=tmp_path / "no_such_file.json",
-            duration_s=2.0,
+            out_dir=tmp_path,
+            out_timing=tmp_path / f"typography_{scene_id}_timing.json",
             width=640,
             height=480,
-            fps=24,
-            seed=0,
-            out_path=tmp_path / "out.png",
         )
 
 
@@ -467,18 +595,21 @@ def _count_opaque(img: Image.Image) -> int:
 def test_text_boxes_not_full_frame_coverage(tmp_path: Path) -> None:
     """Opaque/text pixels must not cover the majority of the frame."""
     adapter = MockTypographyAdapter()
-    script_path = _write_script(tmp_path, _SCRIPT_MINIMAL)
-    out = tmp_path / "overlay.png"
+    scene_id = "scene-01"
+    timeline = _make_minimal_timeline(scene_id, _SCRIPT_MINIMAL["segments"])
+    out_timing = tmp_path / f"typography_{scene_id}_timing.json"
     adapter.render(
-        script_path=script_path,
-        duration_s=2.0,
+        script=_SCRIPT_MINIMAL,
+        timeline=timeline,
+        scene_id=scene_id,
+        seed=42,
+        out_dir=tmp_path,
+        out_timing=out_timing,
         width=320,
         height=240,
-        fps=24,
-        seed=42,
-        out_path=out,
     )
-    with Image.open(out) as img:
+    png = tmp_path / f"typography_{scene_id}_seg-0.png"
+    with Image.open(png) as img:
         total_pixels = 320 * 240
         opaque = _count_opaque(img)
         fraction = opaque / total_pixels
@@ -490,18 +621,21 @@ def test_text_boxes_not_full_frame_coverage(tmp_path: Path) -> None:
 def test_two_zone_layout_when_dialogue_present(tmp_path: Path) -> None:
     """With dialogue, opaque pixels must appear in two distinct vertical bands."""
     adapter = MockTypographyAdapter()
-    script_path = _write_script(tmp_path, _SCRIPT_WITH_DIALOGUE)
-    out = tmp_path / "overlay_dlg.png"
+    scene_id = "scene-02"
+    timeline = _make_minimal_timeline(scene_id, _SCRIPT_WITH_DIALOGUE["segments"])
+    out_timing = tmp_path / f"typography_{scene_id}_timing.json"
     adapter.render(
-        script_path=script_path,
-        duration_s=2.5,
+        script=_SCRIPT_WITH_DIALOGUE,
+        timeline=timeline,
+        scene_id=scene_id,
+        seed=10,
+        out_dir=tmp_path,
+        out_timing=out_timing,
         width=640,
         height=480,
-        fps=24,
-        seed=10,
-        out_path=out,
     )
-    with Image.open(out) as img:
+    png = tmp_path / f"typography_{scene_id}_seg-0.png"
+    with Image.open(png) as img:
         # Split into top half and bottom half; both should have opaque pixels.
         top_half = img.crop((0, 0, 640, 240))
         bottom_half = img.crop((0, 240, 640, 480))
@@ -512,20 +646,25 @@ def test_two_zone_layout_when_dialogue_present(tmp_path: Path) -> None:
 def test_layout_deterministic_pixels(tmp_path: Path) -> None:
     """Same inputs → byte-identical PNG (layout is deterministic)."""
     adapter = MockTypographyAdapter()
-    script_path = _write_script(tmp_path, _SCRIPT_MINIMAL)
-    out1 = tmp_path / "det1.png"
-    out2 = tmp_path / "det2.png"
+    scene_id = "scene-01"
+    timeline = _make_minimal_timeline(scene_id, _SCRIPT_MINIMAL["segments"])
+    out1 = tmp_path / "det1" / f"typography_{scene_id}_timing.json"
+    out2 = tmp_path / "det2" / f"typography_{scene_id}_timing.json"
+    out1.parent.mkdir()
+    out2.parent.mkdir()
     kwargs = dict(
-        script_path=script_path,
-        duration_s=2.0,
+        script=_SCRIPT_MINIMAL,
+        timeline=timeline,
+        scene_id=scene_id,
+        seed=77,
         width=320,
         height=240,
-        fps=24,
-        seed=77,
     )
-    adapter.render(**kwargs, out_path=out1)  # type: ignore[arg-type]
-    adapter.render(**kwargs, out_path=out2)  # type: ignore[arg-type]
-    assert out1.read_bytes() == out2.read_bytes()
+    adapter.render(**kwargs, out_dir=out1.parent, out_timing=out1)  # type: ignore[arg-type]
+    adapter.render(**kwargs, out_dir=out2.parent, out_timing=out2)  # type: ignore[arg-type]
+    png1 = out1.parent / f"typography_{scene_id}_seg-0.png"
+    png2 = out2.parent / f"typography_{scene_id}_seg-0.png"
+    assert png1.read_bytes() == png2.read_bytes()
 
 
 def test_zone_choice_stable_across_python_hash_seeds() -> None:

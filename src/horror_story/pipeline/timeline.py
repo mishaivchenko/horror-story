@@ -114,9 +114,9 @@ def plan_timeline(
     script_path: Path,
     motion_sidecar_path: Path,
     ambient_sidecar_path: Path,
-    typography_sidecar_path: Path,
     voice_line_sidecar_paths: list[Path],
     out_path: Path,
+    typography_sidecar_path: Path | None = None,
 ) -> Path:
     """Produce a timeline JSON artifact from sidecar metadata.
 
@@ -128,14 +128,16 @@ def plan_timeline(
         Path to the ``frames/motion_<scene_id>.json`` sidecar.
     ambient_sidecar_path:
         Path to the ``audio/ambient_<scene_id>.json`` sidecar.
-    typography_sidecar_path:
-        Path to the ``video/typography_<scene_id>.json`` sidecar.
     voice_line_sidecar_paths:
         Paths to all voice-line sidecar JSONs for this scene (both narration
         and dialogue).  Each sidecar's ``line_ref`` field is used to map the
         segment/dialogue id to its actual WAV ``output_path``.
     out_path:
         Destination for the timeline JSON file.
+    typography_sidecar_path:
+        Optional path to the ``video/typography_<scene_id>.json`` sidecar.
+        When None, ``overlay_tracks`` will be empty and ``typography_sidecar``
+        will be omitted from ``sources``.
 
     Returns
     -------
@@ -151,7 +153,11 @@ def plan_timeline(
     script = json.loads(script_path.read_text())
     motion_sidecar = json.loads(motion_sidecar_path.read_text())
     ambient_sidecar = json.loads(ambient_sidecar_path.read_text())
-    typography_sidecar = json.loads(typography_sidecar_path.read_text())
+    typography_sidecar: dict[str, Any] | None = (
+        json.loads(typography_sidecar_path.read_text())
+        if typography_sidecar_path is not None
+        else None
+    )
 
     story_id: str = script["story_id"]
     scene_id: str = script["scene_id"]
@@ -204,12 +210,30 @@ def plan_timeline(
         "end_s": round(scene_duration_s, 6),
     }]
 
-    overlay_tracks = [{
-        "track_id": "overlay-typography",
-        "source_path": _sidecar_source_path(typography_sidecar_path, str(typography_sidecar["output_path"]), out_path),
-        "start_s": 0.0,
-        "end_s": round(scene_duration_s, 6),
-    }]
+    if typography_sidecar is not None and typography_sidecar_path is not None:
+        overlay_tracks: list[dict[str, Any]] = [{
+            "track_id": "overlay-typography",
+            "source_path": _sidecar_source_path(
+                typography_sidecar_path,
+                str(typography_sidecar["output_path"]),
+                out_path,
+            ),
+            "start_s": 0.0,
+            "end_s": round(scene_duration_s, 6),
+        }]
+        sources_typography: str | None = str(typography_sidecar_path)
+    else:
+        overlay_tracks = []
+        sources_typography = None
+
+    sources: dict[str, Any] = {
+        "script": str(script_path),
+        "motion_sidecar": str(motion_sidecar_path),
+        "ambient_sidecar": str(ambient_sidecar_path),
+        "voice_line_sidecars": [str(p) for p in voice_line_sidecar_paths],
+    }
+    if sources_typography is not None:
+        sources["typography_sidecar"] = sources_typography
 
     timeline: dict[str, Any] = {
         "schema_version": "1.0",
@@ -217,13 +241,7 @@ def plan_timeline(
         "scene_id": scene_id,
         "duration_s": round(scene_duration_s, 6),
         "fps": fps,
-        "sources": {
-            "script": str(script_path),
-            "motion_sidecar": str(motion_sidecar_path),
-            "ambient_sidecar": str(ambient_sidecar_path),
-            "typography_sidecar": str(typography_sidecar_path),
-            "voice_line_sidecars": [str(p) for p in voice_line_sidecar_paths],
-        },
+        "sources": sources,
         "video_tracks": video_tracks,
         "audio_tracks": audio_tracks,
         "overlay_tracks": overlay_tracks,

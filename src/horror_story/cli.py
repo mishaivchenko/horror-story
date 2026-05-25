@@ -251,38 +251,38 @@ def _run_scene(
         _patch_scene_entry(index_path, run_dir, scene_id, "partial",
                            ambient=_rel(ambient_path))
 
-        # Stage 8: typography
-        typ_seed = _per_scene_seed(seed, scene_index, 8)
-        typography_path = video_dir / f"typography_{scene_id}{suffix}.png"
-        print(f"[typography] {scene_id} → {typography_path}")
-        AdapterFactory.get_typography(adapters.typography).render(
-            script_path=script_path,
-            duration_s=duration_s,
-            width=width,
-            height=height,
-            fps=fps,
-            seed=typ_seed,
-            out_path=typography_path,
-        )
-        _patch_scene_entry(index_path, run_dir, scene_id, "partial",
-                           typography=_rel(typography_path))
-
-        # Stage 7.5: timeline (no index field — internal artifact)
+        # Stage 7.5: timeline (no typography yet — no index field — internal artifact)
         timeline_path = video_dir / f"timeline_{scene_id}{suffix}.json"
         print(f"[timeline] {scene_id} → {timeline_path}")
         plan_timeline(
             script_path=script_path,
             motion_sidecar_path=motion_path.with_suffix(".json"),
             ambient_sidecar_path=ambient_path.with_suffix(".json"),
-            typography_sidecar_path=typography_path.with_suffix(".json"),
             voice_line_sidecar_paths=voice_line_sidecars,
             out_path=timeline_path,
         )
 
+        # Stage 8: typography (per-segment PNGs + timing manifest)
+        typ_seed = _per_scene_seed(seed, scene_index, 8)
+        out_timing = video_dir / f"typography_{scene_id}{suffix}_timing.json"
+        print(f"[typography] {scene_id} → {out_timing}")
+        AdapterFactory.get_typography(adapters.typography).render(
+            script=json.loads(script_path.read_text()),
+            timeline=json.loads(timeline_path.read_text()),
+            scene_id=scene_id,
+            seed=typ_seed,
+            out_dir=video_dir,
+            out_timing=out_timing,
+            width=width,
+            height=height,
+        )
+        _patch_scene_entry(index_path, run_dir, scene_id, "partial",
+                           typography=_rel(out_timing))
+
         # Stage 9: compose
         composed_path = video_dir / f"scene_{scene_id}_composed{suffix}.mp4"
         print(f"[compositor] {scene_id} → {composed_path}")
-        compose_scene(timeline_path=timeline_path, out_path=composed_path)
+        compose_scene(timeline_path=timeline_path, timing_path=out_timing, out_path=composed_path)
         _patch_scene_entry(index_path, run_dir, scene_id, "complete",
                            composed=_rel(composed_path))
 
@@ -586,7 +586,7 @@ _GLOB_SCHEMA: list[tuple[str, str]] = [
     ("audio/ambient_*.json",         "ambient_artifact.schema.json"),
     ("frames/keyframe_*.json",       "keyframe.schema.json"),
     ("frames/motion_*.json",         "motion_artifact.schema.json"),
-    ("video/typography_*.json",      "typography_artifact.schema.json"),
+    ("video/typography_*_timing.json", "typography_timing.schema.json"),
     ("video/timeline_*.json",        "timeline.schema.json"),
     ("video/scene_*_composed.json",   "composed_scene.schema.json"),
     ("video/scene_*_composed_r*.json", "composed_scene.schema.json"),

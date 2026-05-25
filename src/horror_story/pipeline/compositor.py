@@ -1,10 +1,12 @@
 """Stage 8: Scene compositor.
 
 Combines the motion video, ambient audio, narration/dialogue WAVs, and
-typography PNG overlay into a single H.264/AAC scene MP4 using FFmpeg.
+per-segment typography PNG overlays into a single H.264/AAC scene MP4
+using FFmpeg.
 
 FFmpeg is the *only* component in this stage. All timing is driven by
-the timeline artifact written by Stage 7.5.
+the timeline artifact written by Stage 7.5 (for audio) and the typography
+timing manifest written by Stage 7 (for per-segment text overlays).
 
 Audio mixing strategy
 ---------------------
@@ -15,8 +17,9 @@ silent elsewhere.
 
 Video compositing
 -----------------
-The typography PNG (RGBA) is composited onto the motion video with the
-``overlay`` filter using alpha blending (``format=auto``).
+Each typography segment PNG (RGBA) is composited onto the motion video
+with the ``overlay`` filter using a time-gated ``enable`` expression and
+a 0.15-second fade-in/fade-out alpha.
 
 Duration
 --------
@@ -35,6 +38,8 @@ from typing import Any
 
 logger = logging.getLogger(__name__)
 
+_FADE = 0.15  # fade-in / fade-out duration in seconds
+
 
 class FFmpegNotFoundError(RuntimeError):
     """Raised when FFmpeg is absent from $PATH."""
@@ -46,14 +51,17 @@ def ffmpeg_available() -> bool:
 
 def compose_scene(
     timeline_path: Path,
+    timing_path: Path,
     out_path: Path,
 ) -> Path:
-    """Compose a scene MP4 from the timeline artifact.
+    """Compose a scene MP4 from the timeline artifact and typography timing manifest.
 
     Parameters
     ----------
     timeline_path:
         Path to ``video/timeline_<scene_id>.json`` (Stage 7.5 output).
+    timing_path:
+        Path to ``video/typography_<scene_id>_timing.json`` (Stage 7 output).
     out_path:
         Destination for ``video/scene_<scene_id>_composed.mp4``.
 
@@ -69,7 +77,7 @@ def compose_scene(
     subprocess.CalledProcessError
         If FFmpeg exits non-zero.
     FileNotFoundError
-        If any artifact referenced in the timeline is missing.
+        If any artifact referenced in the timeline or timing manifest is missing.
     """
     if not ffmpeg_available():
         raise FFmpegNotFoundError("ffmpeg not found in $PATH")
@@ -82,7 +90,6 @@ def compose_scene(
 
     video_tracks: list[dict[str, Any]] = timeline["video_tracks"]
     audio_tracks: list[dict[str, Any]] = timeline["audio_tracks"]
-    overlay_tracks: list[dict[str, Any]] = timeline["overlay_tracks"]
 
     # Resolve paths relative to the timeline file's directory when needed.
     timeline_dir = timeline_path.parent
@@ -102,7 +109,17 @@ def compose_scene(
         return resolved
 
     motion_path = _resolve(video_tracks[0]["source_path"])
-    overlay_path = _resolve(overlay_tracks[0]["source_path"])
+
+    # Resolve per-segment PNGs from the timing manifest
+    timing: dict[str, Any] = json.loads(timing_path.read_text())
+    timing_dir = timing_path.parent
+    seg_entries: list[dict[str, Any]] = timing["segments"]
+    seg_pngs: list[Path] = []
+    for entry in seg_entries:
+        png_path = (timing_dir / entry["png"]).resolve()
+        if not png_path.exists():
+            raise FileNotFoundError(f"Segment PNG not found: {png_path}")
+        seg_pngs.append(png_path)
 
     narration_wavs: list[str] = []
     dialogue_wavs: list[str] = []
@@ -116,17 +133,21 @@ def compose_scene(
     # Build FFmpeg command ------------------------------------------------
     # Input ordering:
     #   0: motion video (no audio)
-    #   1: overlay PNG
-    #   2..N: audio tracks (narration, dialogue, ambient — each with delay)
+    #   1..N: segment PNGs (one per timing segment)
+    #   N+1...: audio tracks (narration, dialogue, ambient — each with delay)
     cmd: list[str] = ["ffmpeg", "-y"]
 
     # Video inputs
     cmd += ["-i", str(motion_path)]
-    cmd += ["-i", str(overlay_path)]
+    for seg_png in seg_pngs:
+        # -loop 1 makes FFmpeg generate frames continuously so fade/overlay
+        # filters see a proper advancing PTS instead of a single frame at t=0.
+        cmd += ["-loop", "1", "-i", str(seg_png)]
 
     # Audio inputs with their start offsets
+    n_segments = len(seg_pngs)
     audio_input_indices: list[tuple[int, float]] = []
-    base_input_idx = 2
+    base_input_idx = 1 + n_segments
     for track in audio_tracks:
         wav_path = _resolve(track["source_path"])
         cmd += ["-i", str(wav_path)]
@@ -136,15 +157,48 @@ def compose_scene(
     n_audio = len(audio_input_indices)
 
     # Filter graph ----------------------------------------------------------
-    # Step 1: adelay each audio input to its absolute start offset (ms).
-    # Step 2: amix all delayed streams.
-    # Step 3: overlay the typography PNG (RGBA) onto the motion video.
+    # Step 1: Build per-segment overlay chain for video.
+    # Step 2: adelay each audio input to its absolute start offset (ms).
+    # Step 3: amix all delayed streams.
 
     filter_parts: list[str] = []
 
+    # Video overlay chain: fade each PNG then overlay with enable window.
+    # Step 1: apply fade-in and fade-out to each PNG stream.
+    # Step 2: chain overlay filters so each PNG appears only in its time window.
+    prev_label = "[0:v]"
+    for i, (entry, _png_path) in enumerate(zip(seg_entries, seg_pngs)):
+        start_s: float = float(entry["start_s"])
+        end_s: float = float(entry["end_s"])
+        seg_dur = end_s - start_s
+        fade_out_start = end_s - _FADE
+        png_input_idx = 1 + i
+        is_last = i == n_segments - 1
+        faded_label = f"[faded{i}]"
+        out_label = "[vout]" if is_last else f"[tmp{i}]"
+
+        # Apply fade-in at start_s and fade-out at end_s - _FADE.
+        # alpha=1 preserves the alpha channel of the RGBA PNG.
+        fade_in_filter = (
+            f"[{png_input_idx}:v]"
+            f"fade=t=in:st={start_s}:d={_FADE}:alpha=1,"
+            f"fade=t=out:st={fade_out_start}:d={_FADE}:alpha=1"
+            f"{faded_label}"
+        )
+        filter_parts.append(fade_in_filter)
+
+        enable = f"between(t,{start_s},{end_s})"
+        overlay_filter = (
+            f"{prev_label}{faded_label}"
+            f"overlay=enable='{enable}':format=auto{out_label}"
+        )
+        filter_parts.append(overlay_filter)
+        prev_label = out_label
+
+    # Audio: adelay + aformat (stereo upmix) for each audio input
     stereo_labels: list[str] = []
-    for i, (input_idx, start_s) in enumerate(audio_input_indices):
-        delay_ms = int(round(start_s * 1000))
+    for i, (input_idx, start_s_audio) in enumerate(audio_input_indices):
+        delay_ms = int(round(start_s_audio * 1000))
         del_label = f"[adel{i}]"
         ster_label = f"[aster{i}]"
         # adelay: all_channels=1 handles both mono and stereo inputs uniformly
@@ -161,11 +215,6 @@ def compose_scene(
     stereo_concat = "".join(stereo_labels)
     filter_parts.append(
         f"{stereo_concat}amix=inputs={n_audio}:normalize=0:dropout_transition=0[amixed]"
-    )
-
-    # overlay: alpha-composite typography PNG onto motion video
-    filter_parts.append(
-        "[0:v][1:v]overlay=format=auto[vout]"
     )
 
     filter_graph = "; ".join(filter_parts)
@@ -209,7 +258,7 @@ def compose_scene(
         "inputs": {
             "motion": _rel_to_run(motion_path),
             "ambient": _rel_to_run(ambient_path),
-            "typography": _rel_to_run(overlay_path),
+            "typography": _rel_to_run(timing_path),
             "narration_wavs": [_rel_to_run(Path(p)) for p in narration_wavs],
             "dialogue_wavs": [_rel_to_run(Path(p)) for p in dialogue_wavs],
         },
