@@ -1,6 +1,6 @@
 # Issue #024 — Compositor: per-segment timed text overlays with fade
 
-**Status:** Open
+**Status:** Done
 **Sprint:** 04
 **Priority:** P2
 **Labels:** compositor, typography, animation

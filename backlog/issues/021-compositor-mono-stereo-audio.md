@@ -1,6 +1,6 @@
 # Issue #021 — Compositor: broken right channel in final audio
 
-**Status:** Open
+**Status:** Done
 **Sprint:** 03
 **Labels:** compositor, bug, audio
 **Estimate:** 0.5d

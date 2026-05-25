@@ -1,6 +1,6 @@
 # Issue #016 — Local TTS adapter: Kokoro
 
-**Status:** Open
+**Status:** Done
 **Sprint:** 03
 **Labels:** adapter, atmosphere
 **Estimate:** 1.0d

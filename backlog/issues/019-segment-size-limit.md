@@ -1,6 +1,6 @@
 # Issue #019 — Increase narration segment size limit
 
-**Status:** Open
+**Status:** Done
 **Sprint:** 03
 **Labels:** script, tts, performance
 **Estimate:** 0.5d

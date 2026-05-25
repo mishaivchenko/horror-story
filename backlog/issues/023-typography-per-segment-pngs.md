@@ -1,6 +1,6 @@
 # Issue #023 — Typography: per-segment PNG sequence from timeline
 
-**Status:** Open
+**Status:** Done
 **Sprint:** 04
 **Priority:** P1
 **Labels:** typography, pipeline

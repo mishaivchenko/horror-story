@@ -1,6 +1,6 @@
 # Issue #022 — Spec: move Typography after Timeline, define new contract
 
-**Status:** Open
+**Status:** Done
 **Sprint:** 04
 **Priority:** P0 — blocks #023, #024, #025
 **Labels:** spec, architecture

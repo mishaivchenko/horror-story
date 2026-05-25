@@ -1,6 +1,6 @@
 # Issue #014 — Wire AdapterFactory in CLI
 
-**Status:** Open
+**Status:** Done
 **Sprint:** 03
 **Labels:** pipeline, cli
 **Estimate:** 0.5d

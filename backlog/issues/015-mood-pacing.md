@@ -1,6 +1,6 @@
 # Issue #015 — Mood → pacing wiring
 
-**Status:** Open
+**Status:** Done
 **Sprint:** 03
 **Labels:** pipeline, atmosphere
 **Estimate:** 0.5d

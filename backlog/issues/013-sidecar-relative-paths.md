@@ -1,6 +1,6 @@
 # Issue #013 — Sidecar paths: absolute → relative
 
-**Status:** Open
+**Status:** Done
 **Sprint:** 03
 **Labels:** tech-debt, adapter
 **Estimate:** 0.25d
