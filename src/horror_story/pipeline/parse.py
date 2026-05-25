@@ -5,23 +5,11 @@ from horror_story.models import Scene, classify_mood, slugify, _extract_visual_d
 
 
 def parse_story(text: str, story_id: str) -> list[Scene]:
-    """Split story text into scenes and return Scene dataclasses.
-
-    Two formats are supported and auto-detected:
-    - '---' markers: if the text contains at least one standalone ``---`` line,
-      scenes are split on those markers (legacy format).
-    - Double blank lines: otherwise, scenes are split on two or more consecutive
-      blank lines (three or more newlines, possibly with horizontal whitespace
-      between them).
-    """
+    """Split story text into scenes on standalone '---' markers."""
     if not text.strip():
         raise ValueError("Story text is empty.")
 
-    if re.search(r'(?m)^---$', text):
-        raw_scenes = re.split(r'(?m)^---$', text)
-    else:
-        raw_scenes = re.split(r'\n[ \t]*\n[ \t]*\n+', text)
-
+    raw_scenes = re.split(r'(?m)^---$', text)
     scenes = [chunk.strip() for chunk in raw_scenes if chunk.strip()]
 
     if not scenes:

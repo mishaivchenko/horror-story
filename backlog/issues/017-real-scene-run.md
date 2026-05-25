@@ -1,6 +1,6 @@
 # Issue #017 — Pigeons from Hell: story file + real scene run
 
-**Status:** Open
+**Status:** Done
 **Sprint:** 03
 **Labels:** pipeline, atmosphere
 **Estimate:** 0.5d
@@ -20,11 +20,10 @@ producing a watchable MP4 with synthesized narration.
 
 ### 1. Add story file
 
-`stories/pigeons-from-hell/story.txt`
+`stories/pigeons-from-hell/pigeons_from_hell_EN.txt`
 
 Full public-domain text of *Pigeons from Hell* (Robert E. Howard, 1938) with `---` scene
-boundary markers inserted at natural dramatic breaks. Scene 1 must be ≤ 30 seconds of
-narration (≈ 70–90 words).
+boundary markers inserted at natural dramatic breaks. Scene 1 is 78 words (≤ 30 seconds).
 
 ### 2. Add pipeline config
 
@@ -62,13 +61,12 @@ Branner = "character_en"
 
 ```bash
 python -m horror_story run \
-  --story stories/pigeons-from-hell/story.txt \
-  --out output/sprint03 \
-  --scene <scene-1-id> \
+  --story stories/pigeons-from-hell/pigeons_from_hell_EN.txt \
+  --out output/pigeons-test \
   --seed 42
 ```
 
-Confirm `output/sprint03/.../final_pigeons-from-hell_42.mp4` is produced and playable.
+Confirm `output/pigeons-test/.../final_pigeons-from-hell_42.mp4` is produced and playable.
 
 ---
 
