@@ -22,9 +22,13 @@ _VOICES_FILENAME = "voices-v1.0.bin"
 _RELEASE_BASE = "https://github.com/thewh1teagle/kokoro-onnx/releases/download/model-files-v1.0"
 
 _VOICE_MAP: dict[str, str] = {
-    "narrator_en": "af_heart",
+    "narrator_en": "am_adam",
+    "character_en": "am_michael",
+    "character_en_deep": "bm_george",
+    "character_en_young": "am_puck",
+    "character_en_f": "af_heart",
 }
-_DEFAULT_VOICE = "af_heart"
+_DEFAULT_VOICE = "am_adam"
 
 # Maps BCP-47 two-letter codes to the lang string kokoro-onnx expects.
 _LANG_MAP: dict[str, str] = {
@@ -42,7 +46,7 @@ class KokoroTTSAdapter(TTSAdapter):
         self._kokoro: Any = None
 
     def _load_model(self) -> Any:
-        import kokoro_onnx  # type: ignore[import-not-found]
+        import kokoro_onnx  # type: ignore[import-untyped]
         _CACHE_DIR.mkdir(parents=True, exist_ok=True)
         model_path = _ensure_asset(_MODEL_FILENAME)
         voices_path = _ensure_asset(_VOICES_FILENAME)

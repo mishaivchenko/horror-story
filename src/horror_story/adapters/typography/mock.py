@@ -8,6 +8,22 @@ from typing import Any, NamedTuple
 
 from PIL import Image, ImageDraw, ImageFont
 
+_UNICODE_FONT_CANDIDATES = [
+    "/System/Library/Fonts/Supplemental/Arial Unicode.ttf",
+    "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf",
+    "/usr/share/fonts/truetype/freefont/FreeSans.ttf",
+    "/System/Library/Fonts/Helvetica.ttc",
+]
+
+
+def _load_font(size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
+    for path in _UNICODE_FONT_CANDIDATES:
+        try:
+            return ImageFont.truetype(path, size=size)
+        except (OSError, IOError):
+            continue
+    return ImageFont.load_default(size=size)
+
 from horror_story.adapters.typography.base import TypographyAdapter
 
 _MIN_WIDTH = 320
@@ -153,20 +169,16 @@ def _render_overlay(
 
     font_size = max(12, height // 20)
     font_size_sec = max(10, height // 28)
-    font = ImageFont.load_default(size=font_size)
-    font_sec = ImageFont.load_default(size=font_size_sec)
+    font = _load_font(font_size)
+    font_sec = _load_font(font_size_sec)
 
-    # Primary zone: narration (EN + secondary combined)
-    narration = text_en
-    if text_secondary:
-        narration = text_en + "\n" + text_secondary
+    # Primary zone: prefer secondary language text when available, fall back to EN.
+    narration = text_secondary if text_secondary else text_en
     _render_text_box(draw, zones[0], narration, font, font_size, (255, 255, 255, 255))
 
-    # Secondary zone: dialogue when present
+    # Secondary zone: dialogue when present (secondary language preferred).
     if has_dialogue and len(zones) == 2:
-        dlg_text = dialogue_en
-        if dialogue_secondary:
-            dlg_text = dialogue_en + "\n" + dialogue_secondary
+        dlg_text = dialogue_secondary if dialogue_secondary else dialogue_en
         _render_text_box(draw, zones[1], dlg_text, font_sec, font_size_sec, (220, 220, 180, 255))
 
     return img

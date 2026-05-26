@@ -20,6 +20,9 @@ class AdapterFactory:
         elif name == "kokoro":
             from horror_story.adapters.tts.kokoro import KokoroTTSAdapter
             return KokoroTTSAdapter()
+        elif name == "piper":
+            from horror_story.adapters.tts.piper import PiperTTSAdapter
+            return PiperTTSAdapter()
         raise ValueError(f"unknown TTS adapter: {name!r}")
 
     @staticmethod

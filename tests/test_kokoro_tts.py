@@ -120,7 +120,7 @@ def test_kokoro_voice_map_narrator_en(tmp_path: Path) -> None:
     )
     model.create.assert_called_once()
     _, kwargs = model.create.call_args
-    assert kwargs["voice"] == "af_heart"
+    assert kwargs["voice"] == "am_adam"
 
 
 def test_kokoro_voice_map_unknown_fallback(tmp_path: Path) -> None:
@@ -136,7 +136,7 @@ def test_kokoro_voice_map_unknown_fallback(tmp_path: Path) -> None:
         out_path=out,
     )
     _, kwargs = model.create.call_args
-    assert kwargs["voice"] == "af_heart"
+    assert kwargs["voice"] == "am_adam"
 
 
 # ---------------------------------------------------------------------------

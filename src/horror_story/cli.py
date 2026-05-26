@@ -194,7 +194,10 @@ def _run_scene(
                            script=_rel(script_path))
 
         tts = AdapterFactory.get_tts(adapters.tts)
-        language = str(manifest.languages.get("primary", "en"))
+        primary_lang = str(manifest.languages.get("primary", "en"))
+        secondary_lang = str(manifest.languages.get("secondary", ""))
+        # Synthesize in secondary language when available, fall back to primary.
+        tts_lang = secondary_lang if secondary_lang else primary_lang
 
         # Stage 3: TTS narration + dialogue
         voice_line_sidecars: list[Path] = []
@@ -203,10 +206,11 @@ def _run_scene(
                 seg_seed = _per_scene_seed(seed, scene_index, 3)
                 wav_path = audio_dir / f"narration_{scene_id}_{seg.segment_id}{suffix}.wav"
                 print(f"[tts/narration] {scene_id}/{seg.segment_id} → {wav_path}")
+                tts_text = seg.text_secondary if seg.text_secondary else seg.text_en
                 tts.synthesize(
-                    text=seg.text_en,
+                    text=tts_text,
                     voice_id=seg.voice_id,
-                    language=language,
+                    language=tts_lang,
                     pacing_ms=seg.pacing_ms,
                     seed=seg_seed,
                     out_path=wav_path,
@@ -222,10 +226,11 @@ def _run_scene(
                 dlg_seed = _per_scene_seed(seed, scene_index, 4)
                 wav_path = audio_dir / f"dialogue_{scene_id}_{dlg.line_id}{suffix}.wav"
                 print(f"[tts/dialogue] {scene_id}/{dlg.line_id} → {wav_path}")
+                dlg_text = dlg.text_secondary if dlg.text_secondary else dlg.text_en
                 tts.synthesize(
-                    text=dlg.text_en,
+                    text=dlg_text,
                     voice_id=dlg.voice_id,
-                    language=language,
+                    language=tts_lang,
                     pacing_ms=dlg.pacing_ms,
                     seed=dlg_seed,
                     out_path=wav_path,

@@ -13,7 +13,7 @@ codec = "libx264"
 audio_codec = "aac"
 
 [adapters]
-tts = "kokoro"
+tts = "piper"
 image = "mock"
 motion = "mock"
 audio = "loop"
@@ -23,10 +23,10 @@ typography = "mock"
 style_suffix = "cinematic horror film still, 1930s American South, high contrast chiaroscuro lighting, desaturated color palette, dramatic shadows, photorealistic, no text, no watermark"
 
 [audio]
-assets_dir = "assets/ambient"
+assets_dir = "../../assets/ambient"
 
 [voices]
-narrator = "narrator_en"
-griswell = "character_en"
-branner = "character_en"
-buckner = "character_en"
+narrator = "narrator_uk"
+griswell = "character_uk"
+branner = "character_uk"
+buckner = "character_uk"
