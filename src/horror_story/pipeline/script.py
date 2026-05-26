@@ -132,13 +132,24 @@ def generate_script(
     """Convert a Scene into a Script with narration segments and dialogue lines."""
     narrator_voice = manifest.voices.get("narrator", "narrator")
 
-    segments: list[Segment] = []
-    for i, seg_text in enumerate(_split_narration(scene.text)):
-        word_count = len(seg_text.split())
-        if translator is not None:
-            text_sec = translator.get_paragraph(segment_offset + i, mock_translate(seg_text))
+    narration_texts = _split_narration(scene.text)
+
+    # Resolve secondary-language chunks for this scene.
+    if translator is not None:
+        if hasattr(translator, "prepare_scene"):
+            uk_chunks = translator.prepare_scene(scene.index, len(narration_texts))
         else:
-            text_sec = mock_translate(seg_text)
+            uk_chunks = [
+                translator.get_paragraph(segment_offset + i, mock_translate(t))
+                for i, t in enumerate(narration_texts)
+            ]
+    else:
+        uk_chunks = [mock_translate(t) for t in narration_texts]
+
+    segments: list[Segment] = []
+    for i, seg_text in enumerate(narration_texts):
+        word_count = len(seg_text.split())
+        text_sec = uk_chunks[i] if uk_chunks[i] else mock_translate(seg_text)
         segments.append(
             Segment(
                 segment_id=f"seg-{i}",

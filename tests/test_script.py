@@ -518,18 +518,22 @@ def test_translator_skips_blank_only_paragraphs() -> None:
 
 
 def test_generate_script_uses_translator_for_secondary_text(tmp_path: Path) -> None:
-    """When translator is provided, text_secondary comes from it, not mock_translate."""
+    """When translator is provided with scene_word_counts, text_secondary comes from it."""
     uk_text = "Перший.\n\nДругий.\n\nТретій.\n\nЧетвертий.\n\nП'ятий.\n\nШостий."
-    translator = ParallelTextTranslator(uk_text)
+    scene_text = "Short text here. Another sentence to fill it."
+    en_words = len(scene_text.split())
+    translator = ParallelTextTranslator(
+        uk_text, en_total_words=en_words, scene_word_counts=[en_words]
+    )
 
     scene = Scene(
         story_id="test",
         scene_id="test-scene",
         index=0,
-        text="Short text here. Another sentence to fill it.",
+        text=scene_text,
         visual_description="test",
         mood="dread",
-        word_count=9,
+        word_count=en_words,
     )
     manifest = Manifest(
         schema_version="1.0",
@@ -542,7 +546,7 @@ def test_generate_script_uses_translator_for_secondary_text(tmp_path: Path) -> N
         adapters={},
         scenes=[],
     )
-    script = generate_script(scene, manifest, translator=translator, segment_offset=0)
+    script = generate_script(scene, manifest, translator=translator)
     for seg in script.segments:
         assert not seg.text_secondary.startswith("[uk] "), (
             f"Expected real Ukrainian, got: {seg.text_secondary!r}"
@@ -550,18 +554,27 @@ def test_generate_script_uses_translator_for_secondary_text(tmp_path: Path) -> N
 
 
 def test_generate_script_segment_offset_indexes_correctly() -> None:
-    """segment_offset shifts which paragraph index is used."""
+    """prepare_scene distributes UK paragraphs across the scene's segments."""
+    # Scene 1 (index=1) gets paragraphs at indices proportional to its word count.
+    # With 2 equal-word scenes and 10 paragraphs: scene 0 gets 5, scene 1 gets 5.
     uk_text = "\n\n".join([f"Параграф {i}." for i in range(10)])
-    translator = ParallelTextTranslator(uk_text)
+    scene0_words = 10
+    scene1_words = 10
+    en_total = scene0_words + scene1_words
+    translator = ParallelTextTranslator(
+        uk_text,
+        en_total_words=en_total,
+        scene_word_counts=[scene0_words, scene1_words],
+    )
 
     scene = Scene(
         story_id="test",
-        scene_id="scene-2",
+        scene_id="scene-1",
         index=1,
         text="One two three four five six seven eight nine ten.",
         visual_description="test",
         mood="dread",
-        word_count=10,
+        word_count=scene1_words,
     )
     manifest = Manifest(
         schema_version="1.0",
@@ -574,8 +587,9 @@ def test_generate_script_segment_offset_indexes_correctly() -> None:
         adapters={},
         scenes=[],
     )
-    script = generate_script(scene, manifest, translator=translator, segment_offset=3)
-    assert script.segments[0].text_secondary == "Параграф 3."
+    script = generate_script(scene, manifest, translator=translator)
+    # Scene 1 gets paragraphs 5-9; first segment gets the first of those.
+    assert "Параграф 5" in script.segments[0].text_secondary
 
 
 def test_generate_script_without_translator_uses_mock() -> None:

@@ -553,7 +553,7 @@ def _cmd_run(args: argparse.Namespace) -> None:
             scene_id=args.scene,
         )
 
-        _translator = _build_translator(story_path, config)
+        _translator = _build_translator(story_path, config, scenes=scenes)
         _scene_offset = _segment_offset_for_scene(args.scene, scenes, story_text, config)
 
         composed_path, error = _run_scene(
@@ -619,7 +619,7 @@ def _cmd_run(args: argparse.Namespace) -> None:
     index_path = run_dir / "artifact_index.json"
     errors: list[tuple[str, str]] = []
 
-    run_translator = _build_translator(story_path, config)
+    run_translator = _build_translator(story_path, config, scenes=scenes)
     seg_offset = 0
 
     for scene in scenes:
@@ -664,7 +664,7 @@ def _cmd_run(args: argparse.Namespace) -> None:
         _validate_run_dir(run_dir)
 
 
-def _build_translator(story_path: Path, config: Any) -> Any:
+def _build_translator(story_path: Path, config: Any, scenes: "list[Any] | None" = None) -> Any:
     """Return a ParallelTextTranslator if a secondary-language file exists, else None."""
     from horror_story.pipeline.translate import ParallelTextTranslator
     secondary_lang = str(getattr(config.story, "secondary_language", ""))
@@ -681,7 +681,17 @@ def _build_translator(story_path: Path, config: Any) -> Any:
     for path in (candidate, alt_candidate):
         if path.exists():
             print(f"[script/translate] using parallel text: {path.name}")
-            return ParallelTextTranslator(path.read_text())
+            if scenes is not None:
+                en_total_words = sum(len(s.text.split()) for s in scenes)
+                scene_word_counts = [len(s.text.split()) for s in scenes]
+            else:
+                en_total_words = 1
+                scene_word_counts = [1]
+            return ParallelTextTranslator(
+                path.read_text(),
+                en_total_words=en_total_words,
+                scene_word_counts=scene_word_counts,
+            )
     print(f"[script/translate] fallback: parallel text not found for lang={secondary_lang!r}")
     return None
 
