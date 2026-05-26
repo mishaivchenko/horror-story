@@ -478,7 +478,13 @@ def _cmd_run(args: argparse.Namespace) -> None:
     toml_path = _locate_toml(story_path)
     config = PipelineConfig.from_toml(toml_path)
 
+    # Resolve assets_dir relative to pipeline.toml when it is a relative path.
     import dataclasses
+    if config.audio.assets_dir and not Path(config.audio.assets_dir).is_absolute():
+        resolved_assets = str(toml_path.parent / config.audio.assets_dir)
+        config = dataclasses.replace(
+            config, audio=dataclasses.replace(config.audio, assets_dir=resolved_assets)
+        )
     if args.seed is not None or args.width is not None or args.height is not None:
         story_cfg = config.story
         render_cfg = config.render

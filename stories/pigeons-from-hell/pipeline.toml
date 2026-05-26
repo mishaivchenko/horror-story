@@ -16,14 +16,14 @@ audio_codec = "aac"
 tts = "kokoro"
 image = "mock"
 motion = "mock"
-audio = "mock"
+audio = "loop"
 typography = "mock"
 
 [image]
 style_suffix = "cinematic horror film still, 1930s American South, high contrast chiaroscuro lighting, desaturated color palette, dramatic shadows, photorealistic, no text, no watermark"
 
 [audio]
-assets_dir = ""
+assets_dir = "assets/ambient"
 
 [voices]
 narrator = "narrator_en"
