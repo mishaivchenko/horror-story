@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from horror_story.config import ImageConfig, PipelineConfig
+from horror_story.config import AudioConfig, ImageConfig, PipelineConfig
 
 
 def test_from_toml_loads_correctly(tmp_path: Path) -> None:
@@ -90,3 +90,25 @@ def test_image_style_suffix_override(tmp_path: Path) -> None:
     cfg = PipelineConfig.from_toml(toml_path)
 
     assert cfg.image.style_suffix == "flat design"
+
+
+def test_audio_config_default(tmp_path: Path) -> None:
+    """Missing [audio] section uses AudioConfig default (empty assets_dir) without error."""
+    toml_path = tmp_path / "pipeline.toml"
+    toml_path.write_text(_MINIMAL_TOML)
+
+    cfg = PipelineConfig.from_toml(toml_path)
+
+    assert cfg.audio.assets_dir == AudioConfig().assets_dir
+    assert cfg.audio.assets_dir == ""
+
+
+def test_audio_config_override(tmp_path: Path) -> None:
+    """[audio] assets_dir overrides the default when present in TOML."""
+    toml_content = _MINIMAL_TOML + '\n[audio]\nassets_dir = "/tmp/ambient"\n'
+    toml_path = tmp_path / "pipeline.toml"
+    toml_path.write_text(toml_content)
+
+    cfg = PipelineConfig.from_toml(toml_path)
+
+    assert cfg.audio.assets_dir == "/tmp/ambient"

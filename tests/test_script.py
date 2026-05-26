@@ -483,6 +483,127 @@ def test_generate_script_from_path(tmp_path: Path) -> None:
 # artifact_index update
 # ---------------------------------------------------------------------------
 
+# ── Issue #031 — ParallelTextTranslator ──────────────────────────────────────
+
+from horror_story.pipeline.translate import ParallelTextTranslator
+
+
+def test_translator_returns_paragraph_at_index() -> None:
+    t = ParallelTextTranslator("Перший параграф.\n\nДругий параграф.\n\nТретій.")
+    assert t.get_paragraph(0, "fallback") == "Перший параграф."
+    assert t.get_paragraph(1, "fallback") == "Другий параграф."
+    assert t.get_paragraph(2, "fallback") == "Третій."
+
+
+def test_translator_returns_fallback_on_out_of_range() -> None:
+    t = ParallelTextTranslator("Один параграф.")
+    assert t.get_paragraph(5, "FALLBACK") == "FALLBACK"
+
+
+def test_translator_returns_fallback_on_negative_index() -> None:
+    t = ParallelTextTranslator("Текст.")
+    assert t.get_paragraph(-1, "FB") == "FB"
+
+
+def test_translator_empty_text_always_returns_fallback() -> None:
+    t = ParallelTextTranslator("")
+    assert t.get_paragraph(0, "FB") == "FB"
+    assert t.paragraph_count == 0
+
+
+def test_translator_skips_blank_only_paragraphs() -> None:
+    t = ParallelTextTranslator("А.\n\n  \n\nБ.")
+    assert t.paragraph_count == 2
+    assert t.get_paragraph(1, "FB") == "Б."
+
+
+def test_generate_script_uses_translator_for_secondary_text(tmp_path: Path) -> None:
+    """When translator is provided, text_secondary comes from it, not mock_translate."""
+    uk_text = "Перший.\n\nДругий.\n\nТретій.\n\nЧетвертий.\n\nП'ятий.\n\nШостий."
+    translator = ParallelTextTranslator(uk_text)
+
+    scene = Scene(
+        story_id="test",
+        scene_id="test-scene",
+        index=0,
+        text="Short text here. Another sentence to fill it.",
+        visual_description="test",
+        mood="dread",
+        word_count=9,
+    )
+    manifest = Manifest(
+        schema_version="1.0",
+        story_id="test",
+        title="Test",
+        seed=1,
+        languages={"primary": "en"},
+        render={},
+        voices={},
+        adapters={},
+        scenes=[],
+    )
+    script = generate_script(scene, manifest, translator=translator, segment_offset=0)
+    for seg in script.segments:
+        assert not seg.text_secondary.startswith("[uk] "), (
+            f"Expected real Ukrainian, got: {seg.text_secondary!r}"
+        )
+
+
+def test_generate_script_segment_offset_indexes_correctly() -> None:
+    """segment_offset shifts which paragraph index is used."""
+    uk_text = "\n\n".join([f"Параграф {i}." for i in range(10)])
+    translator = ParallelTextTranslator(uk_text)
+
+    scene = Scene(
+        story_id="test",
+        scene_id="scene-2",
+        index=1,
+        text="One two three four five six seven eight nine ten.",
+        visual_description="test",
+        mood="dread",
+        word_count=10,
+    )
+    manifest = Manifest(
+        schema_version="1.0",
+        story_id="test",
+        title="Test",
+        seed=1,
+        languages={"primary": "en"},
+        render={},
+        voices={},
+        adapters={},
+        scenes=[],
+    )
+    script = generate_script(scene, manifest, translator=translator, segment_offset=3)
+    assert script.segments[0].text_secondary == "Параграф 3."
+
+
+def test_generate_script_without_translator_uses_mock() -> None:
+    """Without translator, mock_translate is still used (backward compat)."""
+    scene = Scene(
+        story_id="test",
+        scene_id="test-scene",
+        index=0,
+        text="Hello world here.",
+        visual_description="test",
+        mood="dread",
+        word_count=3,
+    )
+    manifest = Manifest(
+        schema_version="1.0",
+        story_id="test",
+        title="Test",
+        seed=1,
+        languages={"primary": "en"},
+        render={},
+        voices={},
+        adapters={},
+        scenes=[],
+    )
+    script = generate_script(scene, manifest)
+    assert all(seg.text_secondary.startswith("[uk] ") for seg in script.segments)
+
+
 def test_script_artifact_index_update(tmp_path: Path) -> None:
     """Script path is recorded in artifact_index after writing."""
     from horror_story.manifest import ArtifactIndex, SceneEntry, initialize_run

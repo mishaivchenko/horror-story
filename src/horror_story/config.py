@@ -42,11 +42,17 @@ class ImageConfig:
 
 
 @dataclass(frozen=True)
+class AudioConfig:
+    assets_dir: str = ""
+
+
+@dataclass(frozen=True)
 class PipelineConfig:
     story: StoryConfig
     render: RenderConfig
     adapters: AdapterConfig
     image: ImageConfig = field(default_factory=ImageConfig)
+    audio: AudioConfig = field(default_factory=AudioConfig)
     voices: dict[str, str] = field(default_factory=dict)
 
     @staticmethod
@@ -86,6 +92,18 @@ class PipelineConfig:
             style_suffix=image_raw.get("style_suffix", ImageConfig().style_suffix),
         )
 
+        audio_raw = data.get("audio", {})
+        audio = AudioConfig(
+            assets_dir=str(audio_raw.get("assets_dir", "")),
+        )
+
         voices: dict[str, str] = {k: str(v) for k, v in data.get("voices", {}).items()}
 
-        return PipelineConfig(story=story, render=render, adapters=adapters, image=image, voices=voices)
+        return PipelineConfig(
+            story=story,
+            render=render,
+            adapters=adapters,
+            image=image,
+            audio=audio,
+            voices=voices,
+        )

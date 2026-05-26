@@ -379,7 +379,7 @@ def test_adapter_factory_called_with_config_values(
     mock_factory.get_tts.assert_called_with("mock")
     mock_factory.get_image.assert_called_with("mock")
     mock_factory.get_motion.assert_called_with("mock")
-    mock_factory.get_audio.assert_called_with("mock")
+    mock_factory.get_audio.assert_called_with("mock", assets_dir="")
     mock_factory.get_typography.assert_called_with("mock")
 
 

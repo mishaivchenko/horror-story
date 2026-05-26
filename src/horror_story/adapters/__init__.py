@@ -44,7 +44,11 @@ class AdapterFactory:
         raise ValueError(f"unknown motion adapter: {name!r}")
 
     @staticmethod
-    def get_audio(name: str) -> AudioAdapter:
+    def get_audio(name: str, *, assets_dir: str = "") -> AudioAdapter:
         if name == "mock":
             return MockAudioAdapter()
+        if name == "loop":
+            from horror_story.adapters.audio.loop import LoopAudioAdapter
+            from pathlib import Path as _Path
+            return LoopAudioAdapter(_Path(assets_dir) if assets_dir else _Path())
         raise ValueError(f"unknown audio adapter: {name!r}")

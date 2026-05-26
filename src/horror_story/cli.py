@@ -148,6 +148,9 @@ def _run_scene(
     seed: int,
     suffix: str = "",
     image_style_suffix: str = "",
+    audio_assets_dir: str = "",
+    translator: Any = None,
+    segment_offset: int = 0,
     metrics: MetricsCollector | None = None,
 ) -> tuple[Path | None, str | None]:
     """Run all per-scene stages, patching artifact_index after each one.
@@ -181,7 +184,11 @@ def _run_scene(
         script_path = scripts_dir / f"script_{scene_id}{suffix}.json"
         print(f"[script] {scene_id} → {script_path}")
         with (_m.stage("script_gen", scene_id=scene_id) if _m else _noop_ctx()):
-            script = generate_script_from_path(scene_path, manifest)
+            script = generate_script_from_path(
+                scene_path, manifest,
+                translator=translator,
+                segment_offset=segment_offset,
+            )
             _atomic_write(script_path, json.dumps(script.to_dict(), indent=2))
         _patch_scene_entry(index_path, run_dir, scene_id, "partial",
                            script=_rel(script_path))
@@ -275,7 +282,7 @@ def _run_scene(
         mood = str(scene_data.get("mood", "dread"))
         print(f"[audio/ambient] {scene_id} → {ambient_path}")
         with (_m.stage("audio", scene_id=scene_id) if _m else _noop_ctx()):
-            AdapterFactory.get_audio(adapters.audio).generate(
+            AdapterFactory.get_audio(adapters.audio, assets_dir=audio_assets_dir).generate(
                 mood=mood,
                 duration_s=duration_s,
                 seed=amb_seed,
@@ -540,6 +547,9 @@ def _cmd_run(args: argparse.Namespace) -> None:
             scene_id=args.scene,
         )
 
+        _translator = _build_translator(story_path, config)
+        _scene_offset = _segment_offset_for_scene(args.scene, scenes, story_text, config)
+
         composed_path, error = _run_scene(
             scene_id=args.scene,
             scene_index=scene_index_map[args.scene],
@@ -553,6 +563,9 @@ def _cmd_run(args: argparse.Namespace) -> None:
             seed=seed,
             suffix=suffix,
             image_style_suffix=config.image.style_suffix,
+            audio_assets_dir=config.audio.assets_dir,
+            translator=_translator,
+            segment_offset=_scene_offset,
             metrics=scene_metrics,
         )
 
@@ -600,7 +613,11 @@ def _cmd_run(args: argparse.Namespace) -> None:
     index_path = run_dir / "artifact_index.json"
     errors: list[tuple[str, str]] = []
 
-    for scene_id in [s.scene_id for s in scenes]:
+    run_translator = _build_translator(story_path, config)
+    seg_offset = 0
+
+    for scene in scenes:
+        scene_id = scene.scene_id
         composed_path, error = _run_scene(
             scene_id=scene_id,
             scene_index=scene_index_map[scene_id],
@@ -614,8 +631,13 @@ def _cmd_run(args: argparse.Namespace) -> None:
             seed=seed,
             suffix="",
             image_style_suffix=config.image.style_suffix,
+            audio_assets_dir=config.audio.assets_dir,
+            translator=run_translator,
+            segment_offset=seg_offset,
             metrics=run_metrics,
         )
+        from horror_story.pipeline.script import _split_narration as _sn
+        seg_offset += len(_sn(scene.text))
 
         if error:
             errors.append((scene_id, error))
@@ -634,6 +656,44 @@ def _cmd_run(args: argparse.Namespace) -> None:
 
     if args.validate:
         _validate_run_dir(run_dir)
+
+
+def _build_translator(story_path: Path, config: Any) -> Any:
+    """Return a ParallelTextTranslator if a secondary-language file exists, else None."""
+    from horror_story.pipeline.translate import ParallelTextTranslator
+    secondary_lang = str(getattr(config.story, "secondary_language", ""))
+    if not secondary_lang:
+        return None
+    # Convention: <story_stem>_<lang>.txt alongside the story file.
+    candidate = story_path.with_name(
+        story_path.stem.replace("_EN", "") + f"_{secondary_lang}.txt"
+    )
+    # Also try exact convention used by this project: pijons_from_hell.txt
+    alt_candidate = story_path.parent / story_path.name.replace("_EN.txt", ".txt").replace(
+        "pigeons_from_hell", "pijons_from_hell"
+    )
+    for path in (candidate, alt_candidate):
+        if path.exists():
+            print(f"[script/translate] using parallel text: {path.name}")
+            return ParallelTextTranslator(path.read_text())
+    print(f"[script/translate] fallback: parallel text not found for lang={secondary_lang!r}")
+    return None
+
+
+def _segment_offset_for_scene(
+    scene_id: str,
+    scenes: list[Any],
+    story_text: str,
+    config: Any,
+) -> int:
+    """Count narration segments in all scenes that come before scene_id."""
+    from horror_story.pipeline.script import _split_narration as _sn
+    offset = 0
+    for scene in scenes:
+        if scene.scene_id == scene_id:
+            break
+        offset += len(_sn(scene.text))
+    return offset
 
 
 # Maps glob patterns (relative to run_dir) to schema filenames.

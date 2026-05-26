@@ -6,6 +6,7 @@ from typing import Optional
 
 from horror_story.manifest import Manifest
 from horror_story.models import DialogueLine, Scene, Script, Segment
+from horror_story.pipeline.translate import ParallelTextTranslator
 
 # Matches "Word: text" — character name is letters and spaces only (no newlines)
 _DIALOGUE_RE = re.compile(r'^([A-Z][a-zA-Z ]+):\s+(.+)$', re.MULTILINE)
@@ -122,18 +123,27 @@ def _find_insert_after(segments: list[str], dialogue_match: re.Match[str], full_
     return f"seg-{result_index}"
 
 
-def generate_script(scene: Scene, manifest: Manifest) -> Script:
+def generate_script(
+    scene: Scene,
+    manifest: Manifest,
+    translator: "ParallelTextTranslator | None" = None,
+    segment_offset: int = 0,
+) -> Script:
     """Convert a Scene into a Script with narration segments and dialogue lines."""
     narrator_voice = manifest.voices.get("narrator", "narrator")
 
     segments: list[Segment] = []
     for i, seg_text in enumerate(_split_narration(scene.text)):
         word_count = len(seg_text.split())
+        if translator is not None:
+            text_sec = translator.get_paragraph(segment_offset + i, mock_translate(seg_text))
+        else:
+            text_sec = mock_translate(seg_text)
         segments.append(
             Segment(
                 segment_id=f"seg-{i}",
                 text_en=seg_text,
-                text_secondary=mock_translate(seg_text),
+                text_secondary=text_sec,
                 pacing_ms=_pacing_ms(word_count, scene.mood),
                 voice_id=narrator_voice,
             )
@@ -169,7 +179,12 @@ def generate_script(scene: Scene, manifest: Manifest) -> Script:
     )
 
 
-def generate_script_from_path(scene_path: Path, manifest: Manifest) -> Script:
+def generate_script_from_path(
+    scene_path: Path,
+    manifest: Manifest,
+    translator: "ParallelTextTranslator | None" = None,
+    segment_offset: int = 0,
+) -> Script:
     """Load a scene JSON from disk and generate its script."""
     import json
     from horror_story.models import Scene as _Scene
@@ -184,4 +199,4 @@ def generate_script_from_path(scene_path: Path, manifest: Manifest) -> Script:
         mood=str(data["mood"]),
         word_count=int(data["word_count"]),
     )
-    return generate_script(scene, manifest)
+    return generate_script(scene, manifest, translator=translator, segment_offset=segment_offset)
