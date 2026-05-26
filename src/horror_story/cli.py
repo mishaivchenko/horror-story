@@ -33,6 +33,12 @@ def _build_parser() -> argparse.ArgumentParser:
     run_p.add_argument("--regen", action="store_true", help="Force a new versioned run directory.")
     run_p.add_argument("--width", type=int, default=None, metavar="W", help="Override render width.")
     run_p.add_argument("--height", type=int, default=None, metavar="H", help="Override render height.")
+    run_p.add_argument(
+        "--image-adapter",
+        metavar="NAME",
+        default=None,
+        help="Override the image adapter from pipeline.toml (e.g. mock, mflux-schnell).",
+    )
 
     # validate
     validate_p = sub.add_parser("validate", help="Validate artifacts against schemas.")
@@ -444,6 +450,12 @@ def _cmd_run(args: argparse.Namespace) -> None:
             h = args.height if args.height is not None else render_cfg.height
             render_cfg = dataclasses.replace(render_cfg, width=w, height=h)
         config = dataclasses.replace(config, story=story_cfg, render=render_cfg)
+
+    if args.image_adapter is not None:
+        config = dataclasses.replace(
+            config,
+            adapters=dataclasses.replace(config.adapters, image=args.image_adapter),
+        )
 
     seed = config.story.seed
     width = config.render.width

@@ -1,6 +1,6 @@
 # Issue #026 — MfluxImageAdapter: real keyframe generation via FLUX.1-schnell
 
-**Status:** Open
+**Status:** Closed
 **Sprint:** 05
 **Priority:** P1
 **Labels:** image, adapter, ml

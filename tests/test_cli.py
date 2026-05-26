@@ -759,6 +759,121 @@ def test_resolve_latest_run_ignores_non_revision_dirs(tmp_path: Path) -> None:
     assert _resolve_latest_run(tmp_path, "run_story_42") == tmp_path / "run_story_42_r1"
 
 
+# ---------------------------------------------------------------------------
+# Issue #027: --image-adapter CLI flag
+# ---------------------------------------------------------------------------
+
+def test_parser_image_adapter_flag(tmp_path: Path) -> None:
+    parser = _build_parser()
+    args = parser.parse_args(["run", "--story", "s.txt", "--out", "o/", "--image-adapter", "mflux-schnell"])
+    assert args.image_adapter == "mflux-schnell"
+
+    args = parser.parse_args(["run", "--story", "s.txt", "--out", "o/"])
+    assert args.image_adapter is None
+
+
+def test_image_adapter_flag_overrides_config(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    story_dst, out_dir = _setup_story(tmp_path)
+    # Write a pipeline.toml with a distinct image adapter so the override is meaningful.
+    (tmp_path / "pipeline.toml").write_text(
+        (FIXTURES / "pipeline.toml").read_text().replace(
+            'image = "mock"', 'image = "mflux-schnell"'
+        )
+    )
+
+    mock_factory = MagicMock()
+    mock_factory.get_tts.return_value = MagicMock()
+    mock_factory.get_image.return_value = MagicMock()
+    mock_factory.get_motion.return_value = MagicMock()
+    mock_factory.get_audio.return_value = MagicMock()
+    mock_factory.get_typography.return_value = MagicMock()
+
+    tts_inst = mock_factory.get_tts.return_value
+    tts_inst.synthesize = MagicMock()
+    img_inst = mock_factory.get_image.return_value
+    img_inst.generate = MagicMock()
+    mot_inst = mock_factory.get_motion.return_value
+    mot_inst.animate = MagicMock()
+    aud_inst = mock_factory.get_audio.return_value
+    aud_inst.generate = MagicMock()
+    typ_inst = mock_factory.get_typography.return_value
+    typ_inst.render = MagicMock()
+
+    from horror_story.pipeline import timeline as tl_mod
+    from horror_story.pipeline import compositor as comp_mod
+
+    def _fake_plan_timeline(*args: Any, **kwargs: Any) -> Path:
+        out: Path = kwargs.get("out_path") or args[4]
+        out.write_text(json.dumps({
+            "schema_version": "1.0", "story_id": "x", "scene_id": "x",
+            "duration_s": 5.0, "fps": 24,
+            "video_tracks": [], "audio_tracks": [], "overlay_tracks": [],
+        }))
+        return out
+
+    monkeypatch.setattr(tl_mod, "plan_timeline", _fake_plan_timeline)
+    monkeypatch.setattr(comp_mod, "compose_scene", MagicMock(return_value=None))
+    monkeypatch.setattr(comp_mod, "ffmpeg_available", lambda: True)
+    monkeypatch.setattr("horror_story.cli._voice_lines_duration_s", lambda _: 5.0)
+
+    with patch("horror_story.cli.AdapterFactory", mock_factory), \
+         patch("horror_story.cli._render_final_from_index", MagicMock()):
+        main(_base_args(story_dst, out_dir) + ["--image-adapter", "mock"])
+
+    # Must be "mock" (the override), not "mflux-schnell" (the toml value).
+    mock_factory.get_image.assert_called_with("mock")
+
+
+def test_image_adapter_flag_absent_uses_toml(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    story_dst, out_dir = _setup_story(tmp_path)
+
+    mock_factory = MagicMock()
+    mock_factory.get_tts.return_value = MagicMock()
+    mock_factory.get_image.return_value = MagicMock()
+    mock_factory.get_motion.return_value = MagicMock()
+    mock_factory.get_audio.return_value = MagicMock()
+    mock_factory.get_typography.return_value = MagicMock()
+
+    tts_inst = mock_factory.get_tts.return_value
+    tts_inst.synthesize = MagicMock()
+    img_inst = mock_factory.get_image.return_value
+    img_inst.generate = MagicMock()
+    mot_inst = mock_factory.get_motion.return_value
+    mot_inst.animate = MagicMock()
+    aud_inst = mock_factory.get_audio.return_value
+    aud_inst.generate = MagicMock()
+    typ_inst = mock_factory.get_typography.return_value
+    typ_inst.render = MagicMock()
+
+    from horror_story.pipeline import timeline as tl_mod
+    from horror_story.pipeline import compositor as comp_mod
+
+    def _fake_plan_timeline(*args: Any, **kwargs: Any) -> Path:
+        out: Path = kwargs.get("out_path") or args[4]
+        out.write_text(json.dumps({
+            "schema_version": "1.0", "story_id": "x", "scene_id": "x",
+            "duration_s": 5.0, "fps": 24,
+            "video_tracks": [], "audio_tracks": [], "overlay_tracks": [],
+        }))
+        return out
+
+    monkeypatch.setattr(tl_mod, "plan_timeline", _fake_plan_timeline)
+    monkeypatch.setattr(comp_mod, "compose_scene", MagicMock(return_value=None))
+    monkeypatch.setattr(comp_mod, "ffmpeg_available", lambda: True)
+    monkeypatch.setattr("horror_story.cli._voice_lines_duration_s", lambda _: 5.0)
+
+    with patch("horror_story.cli.AdapterFactory", mock_factory), \
+         patch("horror_story.cli._render_final_from_index", MagicMock()):
+        main(_base_args(story_dst, out_dir))
+
+    # pipeline.toml fixture specifies image = "mock"
+    mock_factory.get_image.assert_called_with("mock")
+
+
 def test_scene_flag_resolves_to_latest_rn_when_bare_absent(tmp_path: Path) -> None:
     """--scene must find the _r1 directory when bare run does not exist (issue #020)."""
     story_dst, out_dir = _setup_story(tmp_path)

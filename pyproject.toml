@@ -12,6 +12,7 @@ dependencies = [
 
 [project.optional-dependencies]
 real = ["kokoro-onnx>=0.4"]
+mflux = ["mflux>=0.4"]
 dev = [
     "pytest>=8.0",
     "pytest-cov>=5.0",
@@ -30,4 +31,7 @@ strict = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
+markers = [
+    "mflux: requires mflux installed and HORROR_STORY_TEST_MFLUX=1",
+]
 

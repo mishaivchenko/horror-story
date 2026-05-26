@@ -26,6 +26,9 @@ class AdapterFactory:
     def get_image(name: str) -> ImageAdapter:
         if name == "mock":
             return MockImageAdapter()
+        if name == "mflux-schnell":
+            from horror_story.adapters.image.mflux import MfluxImageAdapter
+            return MfluxImageAdapter()
         raise ValueError(f"unknown image adapter: {name!r}")
 
     @staticmethod

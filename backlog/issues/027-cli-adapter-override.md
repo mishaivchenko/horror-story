@@ -1,6 +1,6 @@
 # Issue #027 — CLI: --image-adapter flag to override adapter at runtime
 
-**Status:** Open
+**Status:** Closed
 **Sprint:** 05
 **Priority:** P2
 **Labels:** cli, adapter
