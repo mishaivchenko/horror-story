@@ -19,6 +19,9 @@ motion = "mock"
 audio = "mock"
 typography = "mock"
 
+[image]
+style_suffix = "cinematic horror film still, 1930s American South, high contrast chiaroscuro lighting, desaturated color palette, dramatic shadows, photorealistic, no text, no watermark"
+
 [voices]
 narrator = "narrator_en"
 griswell = "character_en"

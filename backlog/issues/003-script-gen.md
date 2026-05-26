@@ -1,5 +1,7 @@
 # Issue 003 — Script generator: scene → bilingual script
 
+**Status:** Done
+
 **Labels:** `pipeline`, `sprint-01`
 **Spec refs:** `spec/PIPELINE.md` §Stage 2, `spec/schemas/script.schema.json`
 **Estimate:** 0.5 day

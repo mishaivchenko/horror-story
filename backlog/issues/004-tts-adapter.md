@@ -1,5 +1,7 @@
 # Issue 004 — TTS adapter: narration + dialogue (mock-first)
 
+**Status:** Done
+
 **Labels:** `adapter`, `sprint-01`
 **Spec refs:** `spec/MVP_PLUS.md` §F-03, §F-04; `spec/PIPELINE.md` §Stage 3a/3b; `spec/schemas/voice_line.schema.json`
 **Estimate:** 0.5 day

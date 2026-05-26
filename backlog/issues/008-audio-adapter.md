@@ -1,5 +1,7 @@
 # Issue 008 — Ambient audio adapter (mock-first)
 
+**Status:** Done
+
 **Labels:** `adapter`, `sprint-02`
 **Spec refs:** `spec/MVP.md` §F-07; `spec/MVP_PLUS.md` §F-07; `spec/PIPELINE.md` §Stage 6
 **Estimate:** 0.25 day

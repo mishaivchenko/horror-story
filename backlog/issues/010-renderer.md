@@ -1,5 +1,7 @@
 # Issue 010 — Final renderer
 
+**Status:** Done
+
 **Labels:** `pipeline`, `sprint-02`
 **Spec refs:** `spec/MVP.md` §F-10; `spec/PIPELINE.md` §Stage 9; `spec/schemas/render_job.schema.json`
 **Estimate:** 0.5 day

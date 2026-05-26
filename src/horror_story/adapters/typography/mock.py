@@ -172,6 +172,30 @@ def _render_overlay(
     return img
 
 
+def _split_text_into_chunks(
+    text: str,
+    max_lines: int,
+    char_w: int,
+) -> list[str]:
+    """Split text into chunks where each chunk wraps to at most max_lines lines."""
+    if not text.strip():
+        return [text]
+    words = text.split()
+    chunks: list[str] = []
+    current: list[str] = []
+    for word in words:
+        candidate = current + [word]
+        line_count = len(textwrap.fill(" ".join(candidate), width=char_w).splitlines())
+        if line_count > max_lines and current:
+            chunks.append(" ".join(current))
+            current = [word]
+        else:
+            current = candidate
+    if current:
+        chunks.append(" ".join(current))
+    return chunks if chunks else [text]
+
+
 class MockTypographyAdapter(TypographyAdapter):
     """Deterministic per-segment RGBA PNG typography adapter. No video rendering; uses Pillow."""
 
@@ -213,12 +237,29 @@ class MockTypographyAdapter(TypographyAdapter):
             if tr.get("track_type") == "narration"
         ]
 
-        timing_segments: list[dict[str, Any]] = []
+        # Compute primary zone geometry once — used for split calculations.
+        font_size = max(12, height // 20)
+        box_h = int(height * _ZONE_MAX_H_FRAC)
+        margin = max(8, int(min(width, height) * 0.03))
+        available_w = int(width * _ZONE_MAX_W_FRAC) - 2 * _BOX_PAD
+        available_h = box_h - 2 * _BOX_PAD - margin  # conservative
+        line_height = font_size + 4
+        max_lines = max(1, available_h // line_height)
+        char_w = max(1, int(available_w / max(1, font_size * 0.6)))
 
-        for i, track in enumerate(narration_tracks):
+        # Derive PNG stem from out_timing so versioned reruns (_r1, _r2, …)
+        # produce versioned PNGs and never overwrite the originals.
+        # out_timing stem: "typography_<scene_id>[_rN]_timing" → strip "_timing"
+        png_stem = out_timing.stem[: -len("_timing")]
+
+        timing_segments: list[dict[str, Any]] = []
+        png_counter = 0
+
+        for track in narration_tracks:
             line_ref = str(track["line_ref"])
             start_s: float = float(track["start_s"])
             end_s: float = float(track["end_s"])
+            duration = end_s - start_s
 
             seg_data = seg_by_id.get(line_ref, {})
             text_en = str(seg_data.get("text_en", ""))
@@ -234,35 +275,49 @@ class MockTypographyAdapter(TypographyAdapter):
             dialogue_en = " ".join(dlg_en_parts)
             dialogue_secondary = " ".join(dlg_sec_parts)
 
-            img = _render_overlay(
-                text_en,
-                text_secondary,
-                dialogue_en,
-                dialogue_secondary,
-                scene_id,
-                seed,
-                width,
-                height,
-            )
+            chunks = _split_text_into_chunks(text_en, max_lines, char_w)
+            total_words = max(1, len(text_en.split()))
+            chunk_suffixes = [chr(ord("a") + j) for j in range(len(chunks))]
 
-            # Derive PNG stem from out_timing so versioned reruns (_r1, _r2, …)
-            # produce versioned PNGs and never overwrite the originals.
-            # out_timing stem: "typography_<scene_id>[_rN]_timing" → strip "_timing"
-            png_stem = out_timing.stem[: -len("_timing")]
-            png_filename = f"{png_stem}_seg-{i}.png"
-            png_path = out_dir / png_filename
-            tmp_png = png_path.with_suffix(".png.tmp")
-            img.save(str(tmp_png), format="PNG")
-            tmp_png.replace(png_path)
+            cursor_s = start_s
+            for j, chunk in enumerate(chunks):
+                chunk_words = max(1, len(chunk.split()))
+                frac = chunk_words / total_words
+                chunk_end_s = cursor_s + duration * frac if j < len(chunks) - 1 else end_s
 
-            timing_segments.append({
-                "seg_id": line_ref,
-                "start_s": start_s,
-                "end_s": end_s,
-                "png": png_path.name,
-                "text_en": text_en,
-                "text_uk": text_secondary,
-            })
+                if len(chunks) == 1:
+                    seg_id_out = line_ref
+                else:
+                    seg_id_out = f"{line_ref}{chunk_suffixes[j]}"
+
+                img = _render_overlay(
+                    chunk,
+                    text_secondary if j == 0 else "",
+                    dialogue_en if j == len(chunks) - 1 else "",
+                    dialogue_secondary if j == len(chunks) - 1 else "",
+                    scene_id,
+                    seed,
+                    width,
+                    height,
+                )
+
+                png_filename = f"{png_stem}_seg-{png_counter}.png"
+                png_path = out_dir / png_filename
+                tmp_png = png_path.with_suffix(".png.tmp")
+                img.save(str(tmp_png), format="PNG")
+                tmp_png.replace(png_path)
+                png_counter += 1
+
+                timing_segments.append({
+                    "seg_id": seg_id_out,
+                    "start_s": cursor_s,
+                    "end_s": chunk_end_s,
+                    "png": png_path.name,
+                    "text_en": chunk,
+                    "text_uk": text_secondary if j == 0 else "",
+                })
+
+                cursor_s = chunk_end_s
 
         timing_manifest: dict[str, Any] = {
             "schema_version": "1.0",

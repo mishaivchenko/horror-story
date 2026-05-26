@@ -1,5 +1,7 @@
 # Issue 009 — Scene compositor
 
+**Status:** Done
+
 **Labels:** `pipeline`, `sprint-02`
 **Spec refs:** `spec/MVP.md` §F-09; `spec/PIPELINE.md` §Stage 8
 **Estimate:** 1 day

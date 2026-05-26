@@ -1,5 +1,7 @@
 # Issue 005 — Image adapter: keyframe generation (mock-first)
 
+**Status:** Done
+
 **Labels:** `adapter`, `sprint-01`
 **Spec refs:** `spec/MVP_PLUS.md` §F-05; `spec/PIPELINE.md` §Stage 4; `spec/schemas/keyframe.schema.json`
 **Estimate:** 0.5 day

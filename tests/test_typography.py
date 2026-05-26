@@ -772,3 +772,126 @@ def test_zones_respect_frame_bounds(tmp_path: Path) -> None:
             assert x0 >= 0 and y0 >= 0
             assert x1 <= 320 and y1 <= 240
             assert x1 > x0 and y1 > y0
+
+
+# ---------------------------------------------------------------------------
+# Auto-split long narration segments (#028)
+# ---------------------------------------------------------------------------
+
+# 78-word text that exceeds max_lines at small dimensions
+_LONG_TEXT = (
+    "It was a dark and stormy night when the traveller arrived at the ancient "
+    "manor house standing alone upon the hill overlooking the fog-filled valley "
+    "below where no birds sang and no crickets chirped and the very air itself "
+    "seemed thick with dread and foreboding as the iron gate swung open with a "
+    "rusted shriek that echoed across the empty grounds"
+)
+
+_SCRIPT_LONG_SEGMENT = {
+    "schema_version": "1.0",
+    "story_id": "pigeons-from-hell",
+    "scene_id": "scene-long",
+    "segments": [
+        {
+            "segment_id": "seg-0",
+            "text_en": _LONG_TEXT,
+            "text_secondary": "",
+            "pacing_ms": 10000,
+            "voice_id": "en-narrator-01",
+        }
+    ],
+    "dialogue_lines": [],
+    "total_duration_ms": 10000,
+}
+
+
+def test_split_text_into_chunks_unit() -> None:
+    """Every chunk wraps to ≤ max_lines; joined chunks contain all original words."""
+    from horror_story.adapters.typography.mock import _split_text_into_chunks
+    import textwrap
+
+    max_lines = 3
+    char_w = 30
+    chunks = _split_text_into_chunks(_LONG_TEXT, max_lines, char_w)
+    assert len(chunks) >= 1
+    for chunk in chunks:
+        lines = textwrap.fill(chunk, width=char_w).splitlines()
+        assert len(lines) <= max_lines, (
+            f"chunk has {len(lines)} lines, expected <= {max_lines}: {chunk!r}"
+        )
+    # All words preserved
+    original_words = _LONG_TEXT.split()
+    chunked_words = " ".join(chunks).split()
+    assert chunked_words == original_words
+
+
+def test_long_segment_splits_into_multiple_pngs(tmp_path: Path) -> None:
+    """A segment that exceeds max_lines produces >1 timing entries and all PNGs exist."""
+    adapter = MockTypographyAdapter()
+    scene_id = "scene-long"
+    timeline = _make_minimal_timeline(scene_id, _SCRIPT_LONG_SEGMENT["segments"])
+    out_timing = tmp_path / f"typography_{scene_id}_timing.json"
+    adapter.render(
+        script=_SCRIPT_LONG_SEGMENT,
+        timeline=timeline,
+        scene_id=scene_id,
+        seed=42,
+        out_dir=tmp_path,
+        out_timing=out_timing,
+        width=320,
+        height=240,
+    )
+    timing = json.loads(out_timing.read_text())
+    entries = timing["segments"]
+    assert len(entries) > 1, "Long segment must produce multiple timing entries"
+    for entry in entries:
+        png_path = tmp_path / entry["png"]
+        assert png_path.exists(), f"PNG missing: {entry['png']}"
+    # Consecutive entries are contiguous
+    for i in range(len(entries) - 1):
+        assert entries[i]["end_s"] == pytest.approx(entries[i + 1]["start_s"]), (
+            f"Gap between entries {i} and {i+1}"
+        )
+
+
+def test_split_covers_full_duration(tmp_path: Path) -> None:
+    """First entry start_s == original start_s; last entry end_s == original end_s."""
+    adapter = MockTypographyAdapter()
+    scene_id = "scene-long"
+    timeline = _make_minimal_timeline(scene_id, _SCRIPT_LONG_SEGMENT["segments"])
+    original_track = timeline["audio_tracks"][0]
+    out_timing = tmp_path / f"typography_{scene_id}_timing.json"
+    adapter.render(
+        script=_SCRIPT_LONG_SEGMENT,
+        timeline=timeline,
+        scene_id=scene_id,
+        seed=42,
+        out_dir=tmp_path,
+        out_timing=out_timing,
+        width=320,
+        height=240,
+    )
+    entries = json.loads(out_timing.read_text())["segments"]
+    assert entries[0]["start_s"] == pytest.approx(original_track["start_s"])
+    assert entries[-1]["end_s"] == pytest.approx(original_track["end_s"])
+
+
+def test_short_segment_not_split(tmp_path: Path) -> None:
+    """Short text that fits in max_lines produces exactly one entry, seg_id unchanged."""
+    adapter = MockTypographyAdapter()
+    scene_id = "scene-01"
+    timeline = _make_minimal_timeline(scene_id, _SCRIPT_MINIMAL["segments"])
+    out_timing = tmp_path / f"typography_{scene_id}_timing.json"
+    adapter.render(
+        script=_SCRIPT_MINIMAL,
+        timeline=timeline,
+        scene_id=scene_id,
+        seed=42,
+        out_dir=tmp_path,
+        out_timing=out_timing,
+        width=640,
+        height=480,
+    )
+    entries = json.loads(out_timing.read_text())["segments"]
+    assert len(entries) == 1
+    assert entries[0]["seg_id"] == "seg-0"

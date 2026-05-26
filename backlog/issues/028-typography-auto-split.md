@@ -1,6 +1,6 @@
 # Issue #028 — Typography: auto-split long narration segments into timed sub-segments
 
-**Status:** Open
+**Status:** Closed
 **Sprint:** 06
 **Priority:** P1
 **Labels:** typography, bug

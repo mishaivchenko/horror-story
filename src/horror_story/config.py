@@ -33,10 +33,20 @@ class AdapterConfig:
 
 
 @dataclass(frozen=True)
+class ImageConfig:
+    style_suffix: str = (
+        "cinematic horror film still, 1930s American South, "
+        "high contrast chiaroscuro lighting, desaturated color palette, "
+        "dramatic shadows, photorealistic, no text, no watermark"
+    )
+
+
+@dataclass(frozen=True)
 class PipelineConfig:
     story: StoryConfig
     render: RenderConfig
     adapters: AdapterConfig
+    image: ImageConfig = field(default_factory=ImageConfig)
     voices: dict[str, str] = field(default_factory=dict)
 
     @staticmethod
@@ -71,6 +81,11 @@ class PipelineConfig:
             typography=adapters_raw["typography"],
         )
 
+        image_raw = data.get("image", {})
+        image = ImageConfig(
+            style_suffix=image_raw.get("style_suffix", ImageConfig().style_suffix),
+        )
+
         voices: dict[str, str] = {k: str(v) for k, v in data.get("voices", {}).items()}
 
-        return PipelineConfig(story=story, render=render, adapters=adapters, voices=voices)
+        return PipelineConfig(story=story, render=render, adapters=adapters, image=image, voices=voices)

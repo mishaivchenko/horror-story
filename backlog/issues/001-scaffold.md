@@ -1,5 +1,7 @@
 # Issue 001 — Project scaffold and CLI skeleton
 
+**Status:** Done
+
 **Labels:** `setup`, `sprint-01`
 **Spec refs:** `spec/TECHNICAL_PLAN.md`, `spec/constitution.md`
 **Estimate:** 0.5 day

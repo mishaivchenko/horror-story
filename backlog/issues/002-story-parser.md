@@ -1,5 +1,7 @@
 # Issue 002 — Story parser: raw text → scene JSON
 
+**Status:** Done
+
 **Labels:** `pipeline`, `sprint-01`
 **Spec refs:** `spec/PIPELINE.md` §Stage 1, `spec/schemas/scene.schema.json`
 **Estimate:** 0.5 day

@@ -1,5 +1,7 @@
 # Issue 008b — Timeline Synchronization Contract
 
+**Status:** Done
+
 **Labels:** `pipeline`, `sprint-02`
 **Spec refs:** `spec/PIPELINE.md` §Stage 7.5; `spec/schemas/timeline.schema.json`
 **Estimate:** 0.5 day

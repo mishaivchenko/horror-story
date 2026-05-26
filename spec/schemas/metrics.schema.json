@@ -1,0 +1,25 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "PipelineMetrics",
+  "type": "object",
+  "required": ["schema_version", "story_id", "run_id", "total_s", "stages"],
+  "properties": {
+    "schema_version": {"type": "string"},
+    "story_id":       {"type": "string"},
+    "run_id":         {"type": "string"},
+    "scene_id":       {"type": ["string", "null"]},
+    "total_s":        {"type": "number", "minimum": 0},
+    "stages": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["stage", "scene_id", "duration_s"],
+        "properties": {
+          "stage":      {"type": "string"},
+          "scene_id":   {"type": ["string", "null"]},
+          "duration_s": {"type": "number", "minimum": 0}
+        }
+      }
+    }
+  }
+}

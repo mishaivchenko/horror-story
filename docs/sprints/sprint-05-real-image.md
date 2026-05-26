@@ -44,5 +44,4 @@ First sprint where the pipeline produces a visually atmospheric scene.
 
 1. **No real ambient audio** — mock silence; no environmental sound or music.
 2. **Typography secondary language** — placeholder reversed-English, not real Ukrainian.
-3. **Single narration segment** — scene splitter emits one segment; multi-segment support pending.
-4. **HuggingFace auth required** — FLUX.1-schnell is a gated model; first run downloads ~8 GB.
+3. ~~**HuggingFace auth required** — FLUX.1-schnell is a gated model; first run downloads ~8 GB.~~ **Resolved** — model downloaded, auth confirmed working.

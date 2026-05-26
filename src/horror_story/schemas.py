@@ -23,6 +23,7 @@ _SCHEMA_FILES = [
     "render_job.schema.json",
     "timeline.schema.json",
     "typography_timing.schema.json",
+    "metrics.schema.json",
 ]
 
 

@@ -7,7 +7,17 @@ import sys
 from pathlib import Path
 from typing import Any
 
+from contextlib import contextmanager
+from typing import Generator
+
 from horror_story.adapters import AdapterFactory
+from horror_story.metrics import MetricsCollector
+
+
+@contextmanager
+def _noop_ctx() -> Generator[None, None, None]:
+    """No-op context manager used when metrics is None."""
+    yield
 
 
 def _build_parser() -> argparse.ArgumentParser:
@@ -47,6 +57,12 @@ def _build_parser() -> argparse.ArgumentParser:
     # validate-schemas
     sub.add_parser("validate-schemas", help="Validate all spec JSON schemas are well-formed.")
 
+    # stats
+    stats_p = sub.add_parser("stats", help="Show timing summary for recent pipeline runs.")
+    stats_p.add_argument("--out", required=True, metavar="DIR", help="Output root directory.")
+    stats_p.add_argument("--story", required=True, metavar="ID", help="Story ID.")
+    stats_p.add_argument("-n", type=int, default=10, metavar="N", help="Number of recent runs to show.")
+
     return parser
 
 
@@ -64,6 +80,8 @@ def main(argv: list[str] | None = None) -> None:
         _cmd_validate(args)
     elif args.command == "validate-schemas":
         _cmd_validate_schemas()
+    elif args.command == "stats":
+        _cmd_stats(args)
 
 
 def _locate_toml(story_path: Path) -> Path:
@@ -129,6 +147,8 @@ def _run_scene(
     fps: int,
     seed: int,
     suffix: str = "",
+    image_style_suffix: str = "",
+    metrics: MetricsCollector | None = None,
 ) -> tuple[Path | None, str | None]:
     """Run all per-scene stages, patching artifact_index after each one.
 
@@ -154,72 +174,79 @@ def _run_scene(
     def _rel(p: Path) -> str:
         return str(p.relative_to(run_dir))
 
+    _m = metrics  # shorthand
+
     try:
         # Stage 2: script
         script_path = scripts_dir / f"script_{scene_id}{suffix}.json"
         print(f"[script] {scene_id} → {script_path}")
-        script = generate_script_from_path(scene_path, manifest)
-        _atomic_write(script_path, json.dumps(script.to_dict(), indent=2))
+        with (_m.stage("script_gen", scene_id=scene_id) if _m else _noop_ctx()):
+            script = generate_script_from_path(scene_path, manifest)
+            _atomic_write(script_path, json.dumps(script.to_dict(), indent=2))
         _patch_scene_entry(index_path, run_dir, scene_id, "partial",
                            script=_rel(script_path))
 
         tts = AdapterFactory.get_tts(adapters.tts)
         language = str(manifest.languages.get("primary", "en"))
 
-        # Stage 3: TTS narration
+        # Stage 3: TTS narration + dialogue
         voice_line_sidecars: list[Path] = []
-        for seg in script.segments:
-            seg_seed = _per_scene_seed(seed, scene_index, 3)
-            wav_path = audio_dir / f"narration_{scene_id}_{seg.segment_id}{suffix}.wav"
-            print(f"[tts/narration] {scene_id}/{seg.segment_id} → {wav_path}")
-            tts.synthesize(
-                text=seg.text_en,
-                voice_id=seg.voice_id,
-                language=language,
-                pacing_ms=seg.pacing_ms,
-                seed=seg_seed,
-                out_path=wav_path,
-                story_id=story_id,
-                scene_id=scene_id,
-                line_ref=seg.segment_id,
-                line_type="narration",
-            )
-            voice_line_sidecars.append(wav_path.with_suffix(".json"))
+        with (_m.stage("tts", scene_id=scene_id) if _m else _noop_ctx()):
+            for seg in script.segments:
+                seg_seed = _per_scene_seed(seed, scene_index, 3)
+                wav_path = audio_dir / f"narration_{scene_id}_{seg.segment_id}{suffix}.wav"
+                print(f"[tts/narration] {scene_id}/{seg.segment_id} → {wav_path}")
+                tts.synthesize(
+                    text=seg.text_en,
+                    voice_id=seg.voice_id,
+                    language=language,
+                    pacing_ms=seg.pacing_ms,
+                    seed=seg_seed,
+                    out_path=wav_path,
+                    story_id=story_id,
+                    scene_id=scene_id,
+                    line_ref=seg.segment_id,
+                    line_type="narration",
+                )
+                voice_line_sidecars.append(wav_path.with_suffix(".json"))
 
-        # Stage 4: TTS dialogue
-        for dlg in script.dialogue_lines:
-            dlg_seed = _per_scene_seed(seed, scene_index, 4)
-            wav_path = audio_dir / f"dialogue_{scene_id}_{dlg.line_id}{suffix}.wav"
-            print(f"[tts/dialogue] {scene_id}/{dlg.line_id} → {wav_path}")
-            tts.synthesize(
-                text=dlg.text_en,
-                voice_id=dlg.voice_id,
-                language=language,
-                pacing_ms=dlg.pacing_ms,
-                seed=dlg_seed,
-                out_path=wav_path,
-                story_id=story_id,
-                scene_id=scene_id,
-                line_ref=dlg.line_id,
-                line_type="dialogue",
-            )
-            voice_line_sidecars.append(wav_path.with_suffix(".json"))
+            # Stage 4: TTS dialogue
+            for dlg in script.dialogue_lines:
+                dlg_seed = _per_scene_seed(seed, scene_index, 4)
+                wav_path = audio_dir / f"dialogue_{scene_id}_{dlg.line_id}{suffix}.wav"
+                print(f"[tts/dialogue] {scene_id}/{dlg.line_id} → {wav_path}")
+                tts.synthesize(
+                    text=dlg.text_en,
+                    voice_id=dlg.voice_id,
+                    language=language,
+                    pacing_ms=dlg.pacing_ms,
+                    seed=dlg_seed,
+                    out_path=wav_path,
+                    story_id=story_id,
+                    scene_id=scene_id,
+                    line_ref=dlg.line_id,
+                    line_type="dialogue",
+                )
+                voice_line_sidecars.append(wav_path.with_suffix(".json"))
 
         # Stage 5: image keyframe
         img_seed = _per_scene_seed(seed, scene_index, 5)
         keyframe_path = frames_dir / f"keyframe_{scene_id}{suffix}.png"
         scene_data = json.loads(scene_path.read_text())
-        prompt = scene_data.get("visual_description", scene_id)
+        visual = scene_data.get("visual_description", scene_id)
+        suffix_stripped = image_style_suffix.strip()
+        prompt = f"{visual}, {suffix_stripped}" if suffix_stripped else visual
         print(f"[image] {scene_id} → {keyframe_path}")
-        AdapterFactory.get_image(adapters.image).generate(
-            prompt=prompt,
-            width=width,
-            height=height,
-            seed=img_seed,
-            out_path=keyframe_path,
-            story_id=story_id,
-            scene_id=scene_id,
-        )
+        with (_m.stage("image", scene_id=scene_id) if _m else _noop_ctx()):
+            AdapterFactory.get_image(adapters.image).generate(
+                prompt=prompt,
+                width=width,
+                height=height,
+                seed=img_seed,
+                out_path=keyframe_path,
+                story_id=story_id,
+                scene_id=scene_id,
+            )
         _patch_scene_entry(index_path, run_dir, scene_id, "partial",
                            keyframe=_rel(keyframe_path))
 
@@ -228,16 +255,17 @@ def _run_scene(
         motion_path = frames_dir / f"motion_{scene_id}{suffix}.mp4"
         duration_s = max(_voice_lines_duration_s(voice_line_sidecars), 1.0)
         print(f"[motion] {scene_id} → {motion_path}")
-        AdapterFactory.get_motion(adapters.motion).animate(
-            frame_path=keyframe_path,
-            duration_s=duration_s,
-            fps=fps,
-            effect="zoom",
-            seed=mot_seed,
-            out_path=motion_path,
-            story_id=story_id,
-            scene_id=scene_id,
-        )
+        with (_m.stage("motion", scene_id=scene_id) if _m else _noop_ctx()):
+            AdapterFactory.get_motion(adapters.motion).animate(
+                frame_path=keyframe_path,
+                duration_s=duration_s,
+                fps=fps,
+                effect="zoom",
+                seed=mot_seed,
+                out_path=motion_path,
+                story_id=story_id,
+                scene_id=scene_id,
+            )
         _patch_scene_entry(index_path, run_dir, scene_id, "partial",
                            motion=_rel(motion_path))
 
@@ -246,49 +274,53 @@ def _run_scene(
         ambient_path = audio_dir / f"ambient_{scene_id}{suffix}.wav"
         mood = str(scene_data.get("mood", "dread"))
         print(f"[audio/ambient] {scene_id} → {ambient_path}")
-        AdapterFactory.get_audio(adapters.audio).generate(
-            mood=mood,
-            duration_s=duration_s,
-            seed=amb_seed,
-            out_path=ambient_path,
-            story_id=story_id,
-            scene_id=scene_id,
-        )
+        with (_m.stage("audio", scene_id=scene_id) if _m else _noop_ctx()):
+            AdapterFactory.get_audio(adapters.audio).generate(
+                mood=mood,
+                duration_s=duration_s,
+                seed=amb_seed,
+                out_path=ambient_path,
+                story_id=story_id,
+                scene_id=scene_id,
+            )
         _patch_scene_entry(index_path, run_dir, scene_id, "partial",
                            ambient=_rel(ambient_path))
 
         # Stage 7.5: timeline (no typography yet — no index field — internal artifact)
         timeline_path = video_dir / f"timeline_{scene_id}{suffix}.json"
         print(f"[timeline] {scene_id} → {timeline_path}")
-        plan_timeline(
-            script_path=script_path,
-            motion_sidecar_path=motion_path.with_suffix(".json"),
-            ambient_sidecar_path=ambient_path.with_suffix(".json"),
-            voice_line_sidecar_paths=voice_line_sidecars,
-            out_path=timeline_path,
-        )
+        with (_m.stage("timeline", scene_id=scene_id) if _m else _noop_ctx()):
+            plan_timeline(
+                script_path=script_path,
+                motion_sidecar_path=motion_path.with_suffix(".json"),
+                ambient_sidecar_path=ambient_path.with_suffix(".json"),
+                voice_line_sidecar_paths=voice_line_sidecars,
+                out_path=timeline_path,
+            )
 
         # Stage 8: typography (per-segment PNGs + timing manifest)
         typ_seed = _per_scene_seed(seed, scene_index, 8)
         out_timing = video_dir / f"typography_{scene_id}{suffix}_timing.json"
         print(f"[typography] {scene_id} → {out_timing}")
-        AdapterFactory.get_typography(adapters.typography).render(
-            script=json.loads(script_path.read_text()),
-            timeline=json.loads(timeline_path.read_text()),
-            scene_id=scene_id,
-            seed=typ_seed,
-            out_dir=video_dir,
-            out_timing=out_timing,
-            width=width,
-            height=height,
-        )
+        with (_m.stage("typography", scene_id=scene_id) if _m else _noop_ctx()):
+            AdapterFactory.get_typography(adapters.typography).render(
+                script=json.loads(script_path.read_text()),
+                timeline=json.loads(timeline_path.read_text()),
+                scene_id=scene_id,
+                seed=typ_seed,
+                out_dir=video_dir,
+                out_timing=out_timing,
+                width=width,
+                height=height,
+            )
         _patch_scene_entry(index_path, run_dir, scene_id, "partial",
                            typography=_rel(out_timing))
 
         # Stage 9: compose
         composed_path = video_dir / f"scene_{scene_id}_composed{suffix}.mp4"
         print(f"[compositor] {scene_id} → {composed_path}")
-        compose_scene(timeline_path=timeline_path, timing_path=out_timing, out_path=composed_path)
+        with (_m.stage("compositor", scene_id=scene_id) if _m else _noop_ctx()):
+            compose_scene(timeline_path=timeline_path, timing_path=out_timing, out_path=composed_path)
         _patch_scene_entry(index_path, run_dir, scene_id, "complete",
                            composed=_rel(composed_path))
 
@@ -502,6 +534,12 @@ def _cmd_run(args: argparse.Namespace) -> None:
         suffix = f"_r{revision}"
         index_path = base_run_dir / "artifact_index.json"
 
+        scene_metrics = MetricsCollector(
+            story_id=config.story.id,
+            run_id=base_run_dir.name,
+            scene_id=args.scene,
+        )
+
         composed_path, error = _run_scene(
             scene_id=args.scene,
             scene_index=scene_index_map[args.scene],
@@ -514,6 +552,8 @@ def _cmd_run(args: argparse.Namespace) -> None:
             fps=fps,
             seed=seed,
             suffix=suffix,
+            image_style_suffix=config.image.style_suffix,
+            metrics=scene_metrics,
         )
 
         if error:
@@ -523,6 +563,8 @@ def _cmd_run(args: argparse.Namespace) -> None:
         print(f"[composed] {args.scene} → {composed_path}")
 
         _render_final_from_index(base_run_dir, manifest, config, seed, index_path)
+
+        scene_metrics.write(base_run_dir / "metrics.json")
 
         if args.validate:
             _validate_run_dir(base_run_dir)
@@ -547,9 +589,12 @@ def _cmd_run(args: argparse.Namespace) -> None:
         run_id = f"{run_id}_r{n}"
         run_dir = out_dir / run_id
 
-    manifest, _, scenes = initialize_run(
-        config, story_text, story_path.name, out_dir, run_id_override=run_id
-    )
+    run_metrics = MetricsCollector(story_id=config.story.id, run_id=run_id)
+
+    with run_metrics.stage("parse"):
+        manifest, _, scenes = initialize_run(
+            config, story_text, story_path.name, out_dir, run_id_override=run_id
+        )
 
     scene_index_map = {s.scene_id: s.index for s in scenes}
     index_path = run_dir / "artifact_index.json"
@@ -568,6 +613,8 @@ def _cmd_run(args: argparse.Namespace) -> None:
             fps=fps,
             seed=seed,
             suffix="",
+            image_style_suffix=config.image.style_suffix,
+            metrics=run_metrics,
         )
 
         if error:
@@ -580,7 +627,10 @@ def _cmd_run(args: argparse.Namespace) -> None:
         print(f"[summary] {len(errors)} scene(s) failed; skipping final render.")
         sys.exit(1)
 
-    _render_final_from_index(run_dir, manifest, config, seed, index_path)
+    with run_metrics.stage("render"):
+        _render_final_from_index(run_dir, manifest, config, seed, index_path)
+
+    run_metrics.write(run_dir / "metrics.json")
 
     if args.validate:
         _validate_run_dir(run_dir)
@@ -602,6 +652,7 @@ _GLOB_SCHEMA: list[tuple[str, str]] = [
     ("video/timeline_*.json",        "timeline.schema.json"),
     ("video/scene_*_composed.json",   "composed_scene.schema.json"),
     ("video/scene_*_composed_r*.json", "composed_scene.schema.json"),
+    ("metrics.json",                  "metrics.schema.json"),
 ]
 
 
@@ -649,3 +700,70 @@ def _cmd_validate_schemas() -> None:
     from horror_story.schemas import load_all_schemas
     schemas = load_all_schemas()
     print(f"[validate-schemas] loaded {len(schemas)} schemas — all well-formed.")
+
+
+# Column names for the stats table.
+_STATS_STAGES = ["parse", "script_gen", "tts", "image", "motion", "audio", "timeline", "typography", "compositor", "render"]
+
+
+def _fmt_s(value: float | None) -> str:
+    """Format a duration in seconds for the stats table."""
+    if value is None:
+        return "-"
+    if value < 10:
+        return f"{value:.1f}s"
+    return f"{round(value)}s"
+
+
+def _cmd_stats(args: argparse.Namespace) -> None:
+    out_dir = Path(args.out)
+    story_id: str = args.story
+    n: int = args.n
+
+    pattern = str(out_dir / story_id / "run_*" / "metrics.json")
+    import glob as _glob
+    paths = sorted(_glob.glob(pattern))
+
+    if not paths:
+        print(f"[stats] no metrics.json files found under {out_dir / story_id}")
+        return
+
+    # Sort by run_id (parent directory name) descending, take last N.
+    paths.sort(key=lambda p: Path(p).parent.name, reverse=True)
+    paths = paths[:n]
+
+    # Collect typed records from each metrics file.
+    run_ids: list[str] = []
+    totals: list[float] = []
+    stage_maps: list[dict[str, float]] = []
+
+    for p in paths:
+        data = json.loads(Path(p).read_text())
+        sm: dict[str, float] = {}
+        for entry in data.get("stages", []):
+            stage_name = str(entry["stage"])
+            duration = float(entry["duration_s"])
+            # Accumulate per-stage totals (multiple scene entries for same stage).
+            sm[stage_name] = sm.get(stage_name, 0.0) + duration
+        run_ids.append(str(data.get("run_id", Path(p).parent.name)))
+        totals.append(float(data.get("total_s", 0.0)))
+        stage_maps.append(sm)
+
+    # Pick only stages that appear in at least one run, preserving canonical order.
+    present_stages = [s for s in _STATS_STAGES if any(s in sm for sm in stage_maps)]
+
+    # Build header.
+    run_id_w = max(len("run-id"), max(len(rid) for rid in run_ids))
+    col_w = 8
+
+    header_parts = [f"{'run-id':<{run_id_w}}", f"{'total':>{col_w}}"]
+    for s in present_stages:
+        header_parts.append(f"{s[:col_w]:>{col_w}}")
+    print("  ".join(header_parts))
+
+    for rid, total, sm in zip(run_ids, totals, stage_maps):
+        total_str = _fmt_s(total)
+        row_parts = [f"{rid:<{run_id_w}}", f"{total_str:>{col_w}}"]
+        for s in present_stages:
+            row_parts.append(f"{_fmt_s(sm.get(s)):>{col_w}}")
+        print("  ".join(row_parts))

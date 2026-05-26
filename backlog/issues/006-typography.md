@@ -1,5 +1,7 @@
 # Issue 006 — Typography overlay adapter (mock-first)
 
+**Status:** Done
+
 **Labels:** `adapter`, `sprint-02`
 **Spec refs:** `spec/MVP.md` §F-08; `spec/MVP_PLUS.md` §F-08; `spec/PIPELINE.md` §Stage 7
 **Estimate:** 0.5 day

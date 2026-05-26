@@ -1,5 +1,7 @@
 # Issue 007 — Motion adapter: keyframe → silent video (mock-first)
 
+**Status:** Done
+
 **Labels:** `adapter`, `sprint-02`
 **Spec refs:** `spec/MVP.md` §F-06; `spec/MVP_PLUS.md` §F-06; `spec/PIPELINE.md` §Stage 5
 **Estimate:** 0.5 day
