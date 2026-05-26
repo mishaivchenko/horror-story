@@ -166,6 +166,36 @@ def test_mflux_generate_deterministic_sidecar(tmp_path: Path) -> None:
         assert j1[key] == j2[key], f"sidecar field {key!r} differs"
 
 
+def test_mflux_generate_stale_tmp_overwritten(tmp_path: Path) -> None:
+    """Stale .tmp.png from an interrupted run must not cause the wrong file to be used."""
+    fake_Flux1, fake_ModelConfig = _make_fake_mflux(tmp_path)
+
+    flux_mod = ModuleType("mflux.models.flux.variants.txt2img.flux")
+    flux_mod.Flux1 = fake_Flux1  # type: ignore[attr-defined]
+    cfg_mod = ModuleType("mflux.models.common.config")
+    cfg_mod.ModelConfig = fake_ModelConfig  # type: ignore[attr-defined]
+
+    out = tmp_path / "frame.png"
+    stale_tmp = out.with_name(out.stem + ".tmp.png")
+    # Write a stale sentinel file that mflux would normally refuse to overwrite.
+    stale_tmp.write_bytes(b"stale")
+
+    with patch.dict("sys.modules", {
+        "mflux.models.flux.variants.txt2img.flux": flux_mod,
+        "mflux.models.common.config": cfg_mod,
+    }):
+        MfluxImageAdapter().generate(
+            prompt="Test.", width=320, height=240, seed=1,
+            out_path=out,
+        )
+
+    assert out.exists()
+    assert not stale_tmp.exists()
+    # The output must be a valid PNG, not the stale sentinel bytes.
+    with Image.open(out) as img:
+        assert img.format == "PNG"
+
+
 # ---------------------------------------------------------------------------
 # Smoke test — real generation (skipped unless HORROR_STORY_TEST_MFLUX=1)
 # ---------------------------------------------------------------------------

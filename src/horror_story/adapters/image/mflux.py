@@ -72,7 +72,9 @@ class MfluxImageAdapter(ImageAdapter):
         )
 
         tmp = out_path.with_name(out_path.stem + ".tmp.png")
-        image.save(str(tmp))
+        if tmp.exists():
+            tmp.unlink()
+        image.save(str(tmp), overwrite=True)
 
         # Upscale to target dimensions if FLUX generated at a smaller size.
         if (flux_w, flux_h) != (width, height):

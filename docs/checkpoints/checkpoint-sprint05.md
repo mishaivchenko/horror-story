@@ -1,7 +1,7 @@
 # Sprint 05 Checkpoint
 
 **Date:** 2026-05-26
-**Branch:** main (working changes uncommitted)
+**Commit:** 4364238
 **Issues closed:** #026, #027
 
 ---
@@ -38,6 +38,18 @@
 301 passed, 1 skipped (mflux smoke), 5 warnings
 mypy --strict src/: Success, no issues found in 32 source files
 ```
+
+---
+
+## Sprint 05 acceptance — real run verified
+
+Scene `griswell-awoke-suddenly-every-nerve-tingling-pre` run with `--image-adapter
+mflux-schnell` completed successfully (_r5). Real AI-generated keyframe confirmed
+(FLUX.1-schnell, 1360×768 → upscaled to 1920×1080). Schema validation passed on
+all 200+ artifacts. Full acceptance criteria met.
+
+Known regression found post-acceptance: long narration segments (78 words) overflow
+the typography zone — tracked as #028 (Sprint 06).
 
 ---
 
