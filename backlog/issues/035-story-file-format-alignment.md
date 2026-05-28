@@ -1,6 +1,6 @@
 # #035 — Align EN and UK story file formats
 
-**Status:** Open
+**Status:** Closed
 **Sprint:** 07
 
 ## Problem

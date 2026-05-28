@@ -1,6 +1,6 @@
 # Issue #030 — Config: image style suffix for consistent visual style
 
-**Status:** Open
+**Status:** Closed
 **Sprint:** backlog
 **Priority:** P1
 **Labels:** image, config, visual-quality

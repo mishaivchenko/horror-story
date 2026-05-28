@@ -1,6 +1,6 @@
 # Issue #038 — Typography: split secondary text so overlays do not truncate
 
-**Status:** Open
+**Status:** Closed
 **Sprint:** 07
 **Priority:** P1
 **Labels:** typography, bilingual, bug

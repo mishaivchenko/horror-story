@@ -1,6 +1,6 @@
 # Issue #029 — Pipeline: per-stage timing and metrics collection
 
-**Status:** Open
+**Status:** Closed
 **Sprint:** backlog
 **Priority:** P3
 **Labels:** observability, performance

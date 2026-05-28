@@ -1,6 +1,6 @@
 # #034 — CLI `--lang` flag for language selection
 
-**Status:** Open
+**Status:** Closed
 **Sprint:** 07
 
 ## Problem

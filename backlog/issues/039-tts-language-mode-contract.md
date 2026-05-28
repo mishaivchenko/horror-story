@@ -1,6 +1,6 @@
 # Issue #039 — CLI: make TTS language selection explicit
 
-**Status:** Open
+**Status:** Closed
 **Sprint:** 07
 **Priority:** P1
 **Labels:** cli, tts, bilingual, bug

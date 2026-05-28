@@ -1,6 +1,6 @@
 # Issue #040 — Translation: use scene-aware aligned secondary text chunks
 
-**Status:** Open
+**Status:** Closed
 **Sprint:** 07
 **Priority:** P2
 **Labels:** translation, bilingual, alignment
