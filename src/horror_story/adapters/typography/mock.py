@@ -287,8 +287,11 @@ class MockTypographyAdapter(TypographyAdapter):
             dialogue_en = " ".join(dlg_en_parts)
             dialogue_secondary = " ".join(dlg_sec_parts)
 
-            chunks = _split_text_into_chunks(text_en, max_lines, char_w)
-            total_words = max(1, len(text_en.split()))
+            # Split using the displayed text (UK if available, else EN) so that
+            # the rendered text always fits within max_lines regardless of language.
+            display_text = text_secondary if text_secondary else text_en
+            chunks = _split_text_into_chunks(display_text, max_lines, char_w)
+            total_words = max(1, len(display_text.split()))
             chunk_suffixes = [chr(ord("a") + j) for j in range(len(chunks))]
 
             cursor_s = start_s
@@ -302,9 +305,11 @@ class MockTypographyAdapter(TypographyAdapter):
                 else:
                     seg_id_out = f"{line_ref}{chunk_suffixes[j]}"
 
+                # chunk IS the display text (UK when available, EN when not).
+                # Pass it as the primary narration text; no separate secondary needed.
                 img = _render_overlay(
                     chunk,
-                    text_secondary if j == 0 else "",
+                    "",
                     dialogue_en if j == len(chunks) - 1 else "",
                     dialogue_secondary if j == len(chunks) - 1 else "",
                     scene_id,
@@ -325,8 +330,8 @@ class MockTypographyAdapter(TypographyAdapter):
                     "start_s": cursor_s,
                     "end_s": chunk_end_s,
                     "png": png_path.name,
-                    "text_en": chunk,
-                    "text_uk": text_secondary if j == 0 else "",
+                    "text_en": text_en,   # full EN original — metadata / TTS reference
+                    "text_uk": chunk,     # the rendered display chunk
                 })
 
                 cursor_s = chunk_end_s

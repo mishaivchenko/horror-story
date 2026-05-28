@@ -1,12 +1,33 @@
 from __future__ import annotations
 
+_ALIGNED_SEP = "\n---\n"
+# Characters that end narrative sentences (used to distinguish preamble titles
+# from prose paragraphs).
+_SENTENCE_TERMINALS = frozenset(".!?\"»")
+
+
+def _is_preamble(paragraphs: list[str]) -> bool:
+    """Return True if *paragraphs* looks like a chapter-title preamble.
+
+    A preamble is a single short paragraph that does not end with a
+    sentence-terminal character (i.e. it's a title, not prose).
+    """
+    return (
+        len(paragraphs) == 1
+        and bool(paragraphs[0])
+        and paragraphs[0][-1] not in _SENTENCE_TERMINALS
+    )
+
 
 class ParallelTextTranslator:
     """Maps narration segments to chunks of a parallel translation text.
 
-    The secondary text has no scene boundaries, so paragraphs are distributed
-    across scenes proportionally by English word count. Within each scene,
-    allocated paragraphs are merged into exactly N chunks (one per EN segment).
+    If the text contains ``\\n---\\n`` separators (aligned mode), each section
+    between separators maps exactly to one scene.  A leading preamble section
+    (single chapter-title paragraph, no terminal punctuation) is silently
+    dropped so that ``_scene_chunks[0]`` always contains narrative prose.
+    Otherwise paragraphs are distributed across scenes proportionally by
+    English word count (proportional fallback).
 
     Usage:
         translator = ParallelTextTranslator(uk_text, en_scenes)
@@ -20,11 +41,26 @@ class ParallelTextTranslator:
         en_total_words: int = 0,
         scene_word_counts: list[int] | None = None,
     ) -> None:
-        self._paragraphs: list[str] = [
-            p.strip() for p in text.split("\n\n") if p.strip()
-        ]
-        self._scene_chunks: list[list[str]] = []
-        self._build_scene_chunks(en_total_words, scene_word_counts or [])
+        if _ALIGNED_SEP in text:
+            # Aligned mode: each section maps exactly to one scene.
+            sections = [s.strip() for s in text.split(_ALIGNED_SEP)]
+            self._paragraphs: list[str] = []
+            all_chunks: list[list[str]] = [
+                [p.strip() for p in sec.split("\n\n") if p.strip()]
+                for sec in sections
+            ]
+            # Drop a leading preamble (chapter title) so scene_index 0
+            # maps to the first narrative section.
+            if all_chunks and _is_preamble(all_chunks[0]):
+                all_chunks = all_chunks[1:]
+            self._scene_chunks: list[list[str]] = all_chunks
+        else:
+            # Proportional fallback (existing behaviour).
+            self._paragraphs = [
+                p.strip() for p in text.split("\n\n") if p.strip()
+            ]
+            self._scene_chunks = []
+            self._build_scene_chunks(en_total_words, scene_word_counts or [])
 
     def _build_scene_chunks(
         self, en_total_words: int, scene_word_counts: list[int]
@@ -75,6 +111,9 @@ class ParallelTextTranslator:
 
     @property
     def paragraph_count(self) -> int:
+        if self._scene_chunks and not self._paragraphs:
+            # Aligned mode: total paragraph count across all scene chunks.
+            return sum(len(chunk) for chunk in self._scene_chunks)
         return len(self._paragraphs)
 
     # ── Legacy flat-index API (kept for backward compatibility with tests) ──

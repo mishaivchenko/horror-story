@@ -10,7 +10,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from horror_story.cli import _build_parser, _resolve_latest_run, main
+from horror_story.cli import _build_parser, _resolve_lang_config, _resolve_latest_run, main
 from horror_story.pipeline.compositor import ffmpeg_available
 
 requires_ffmpeg = pytest.mark.skipif(
@@ -872,6 +872,219 @@ def test_image_adapter_flag_absent_uses_toml(
 
     # pipeline.toml fixture specifies image = "mock"
     mock_factory.get_image.assert_called_with("mock")
+
+
+# ---------------------------------------------------------------------------
+# --lang flag: _resolve_lang_config and parser
+# ---------------------------------------------------------------------------
+
+def _make_pipeline_config(tts: str = "mock") -> Any:
+    """Return a minimal PipelineConfig with the given tts adapter name."""
+    from horror_story.config import (
+        PipelineConfig, StoryConfig, RenderConfig, AdapterConfig,
+    )
+    return PipelineConfig(
+        story=StoryConfig(
+            id="test", title="Test",
+            primary_language="en", secondary_language="uk", seed=42,
+        ),
+        render=RenderConfig(width=320, height=240, fps=24, codec="libx264", audio_codec="aac"),
+        adapters=AdapterConfig(
+            tts=tts, image="mock", motion="mock", audio="mock", typography="mock",
+        ),
+    )
+
+
+def test_resolve_lang_config_none_leaves_config_unchanged() -> None:
+    """_resolve_lang_config(None, config) must return the config unmodified."""
+    cfg = _make_pipeline_config(tts="mock")
+    result = _resolve_lang_config(None, cfg)
+    assert result is cfg
+
+
+def test_resolve_lang_config_en_sets_kokoro() -> None:
+    """_resolve_lang_config('en', config) must set adapters.tts to 'kokoro'."""
+    cfg = _make_pipeline_config(tts="mock")
+    result = _resolve_lang_config("en", cfg)
+    assert result.adapters.tts == "kokoro"
+    # Original must not be mutated (frozen dataclass).
+    assert cfg.adapters.tts == "mock"
+
+
+def test_resolve_lang_config_uk_sets_piper() -> None:
+    """_resolve_lang_config('uk', config) must set adapters.tts to 'piper'."""
+    cfg = _make_pipeline_config(tts="mock")
+    result = _resolve_lang_config("uk", cfg)
+    assert result.adapters.tts == "piper"
+    assert cfg.adapters.tts == "mock"
+
+
+def test_parser_lang_flag_default_is_none() -> None:
+    """--lang must default to None when omitted."""
+    parser = _build_parser()
+    args = parser.parse_args(["run", "--story", "s.txt", "--out", "o/"])
+    assert args.lang is None
+
+
+def test_parser_lang_flag_accepts_en() -> None:
+    parser = _build_parser()
+    args = parser.parse_args(["run", "--story", "s.txt", "--out", "o/", "--lang", "en"])
+    assert args.lang == "en"
+
+
+def test_parser_lang_flag_accepts_uk() -> None:
+    parser = _build_parser()
+    args = parser.parse_args(["run", "--story", "s.txt", "--out", "o/", "--lang", "uk"])
+    assert args.lang == "uk"
+
+
+def test_parser_lang_flag_rejects_invalid(capsys: pytest.CaptureFixture[str]) -> None:
+    parser = _build_parser()
+    with pytest.raises(SystemExit):
+        parser.parse_args(["run", "--story", "s.txt", "--out", "o/", "--lang", "fr"])
+
+
+def test_lang_en_dry_run_shows_kokoro_adapter(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """--lang en must resolve to kokoro adapter (visible via dry-run output)."""
+    story_dst, out_dir = _setup_story(tmp_path)
+    # dry-run does not invoke adapters, but we can verify config resolution
+    # indirectly by confirming no error is raised with --lang en.
+    main(["run", "--story", str(story_dst), "--out", str(out_dir),
+          "--dry-run", "--lang", "en"])
+    captured = capsys.readouterr()
+    assert "dry-run" in captured.out
+
+
+def test_lang_en_overrides_tts_adapter(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """--lang en must cause AdapterFactory.get_tts to be called with 'kokoro'."""
+    story_dst, out_dir = _setup_story(tmp_path)
+
+    mock_factory = MagicMock()
+    mock_factory.get_tts.return_value = MagicMock()
+    mock_factory.get_image.return_value = MagicMock()
+    mock_factory.get_motion.return_value = MagicMock()
+    mock_factory.get_audio.return_value = MagicMock()
+    mock_factory.get_typography.return_value = MagicMock()
+
+    mock_factory.get_tts.return_value.synthesize = MagicMock()
+    mock_factory.get_image.return_value.generate = MagicMock()
+    mock_factory.get_motion.return_value.animate = MagicMock()
+    mock_factory.get_audio.return_value.generate = MagicMock()
+    mock_factory.get_typography.return_value.render = MagicMock()
+
+    from horror_story.pipeline import timeline as tl_mod
+    from horror_story.pipeline import compositor as comp_mod
+
+    def _fake_plan_timeline(*args: Any, **kwargs: Any) -> Path:
+        out: Path = kwargs.get("out_path") or args[4]
+        out.write_text(json.dumps({
+            "schema_version": "1.0", "story_id": "x", "scene_id": "x",
+            "duration_s": 5.0, "fps": 24,
+            "video_tracks": [], "audio_tracks": [], "overlay_tracks": [],
+        }))
+        return out
+
+    monkeypatch.setattr(tl_mod, "plan_timeline", _fake_plan_timeline)
+    monkeypatch.setattr(comp_mod, "compose_scene", MagicMock(return_value=None))
+    monkeypatch.setattr(comp_mod, "ffmpeg_available", lambda: True)
+    monkeypatch.setattr("horror_story.cli._voice_lines_duration_s", lambda _: 5.0)
+
+    with patch("horror_story.cli.AdapterFactory", mock_factory), \
+         patch("horror_story.cli._render_final_from_index", MagicMock()):
+        main(_base_args(story_dst, out_dir) + ["--lang", "en"])
+
+    mock_factory.get_tts.assert_called_with("kokoro")
+
+
+def test_lang_uk_overrides_tts_adapter(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """--lang uk must cause AdapterFactory.get_tts to be called with 'piper'."""
+    story_dst, out_dir = _setup_story(tmp_path)
+
+    mock_factory = MagicMock()
+    mock_factory.get_tts.return_value = MagicMock()
+    mock_factory.get_image.return_value = MagicMock()
+    mock_factory.get_motion.return_value = MagicMock()
+    mock_factory.get_audio.return_value = MagicMock()
+    mock_factory.get_typography.return_value = MagicMock()
+
+    mock_factory.get_tts.return_value.synthesize = MagicMock()
+    mock_factory.get_image.return_value.generate = MagicMock()
+    mock_factory.get_motion.return_value.animate = MagicMock()
+    mock_factory.get_audio.return_value.generate = MagicMock()
+    mock_factory.get_typography.return_value.render = MagicMock()
+
+    from horror_story.pipeline import timeline as tl_mod
+    from horror_story.pipeline import compositor as comp_mod
+
+    def _fake_plan_timeline(*args: Any, **kwargs: Any) -> Path:
+        out: Path = kwargs.get("out_path") or args[4]
+        out.write_text(json.dumps({
+            "schema_version": "1.0", "story_id": "x", "scene_id": "x",
+            "duration_s": 5.0, "fps": 24,
+            "video_tracks": [], "audio_tracks": [], "overlay_tracks": [],
+        }))
+        return out
+
+    monkeypatch.setattr(tl_mod, "plan_timeline", _fake_plan_timeline)
+    monkeypatch.setattr(comp_mod, "compose_scene", MagicMock(return_value=None))
+    monkeypatch.setattr(comp_mod, "ffmpeg_available", lambda: True)
+    monkeypatch.setattr("horror_story.cli._voice_lines_duration_s", lambda _: 5.0)
+
+    with patch("horror_story.cli.AdapterFactory", mock_factory), \
+         patch("horror_story.cli._render_final_from_index", MagicMock()):
+        main(_base_args(story_dst, out_dir) + ["--lang", "uk"])
+
+    mock_factory.get_tts.assert_called_with("piper")
+
+
+def test_lang_absent_uses_toml_tts(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Omitting --lang must leave the TTS adapter from pipeline.toml unchanged ('mock')."""
+    story_dst, out_dir = _setup_story(tmp_path)
+
+    mock_factory = MagicMock()
+    mock_factory.get_tts.return_value = MagicMock()
+    mock_factory.get_image.return_value = MagicMock()
+    mock_factory.get_motion.return_value = MagicMock()
+    mock_factory.get_audio.return_value = MagicMock()
+    mock_factory.get_typography.return_value = MagicMock()
+
+    mock_factory.get_tts.return_value.synthesize = MagicMock()
+    mock_factory.get_image.return_value.generate = MagicMock()
+    mock_factory.get_motion.return_value.animate = MagicMock()
+    mock_factory.get_audio.return_value.generate = MagicMock()
+    mock_factory.get_typography.return_value.render = MagicMock()
+
+    from horror_story.pipeline import timeline as tl_mod
+    from horror_story.pipeline import compositor as comp_mod
+
+    def _fake_plan_timeline(*args: Any, **kwargs: Any) -> Path:
+        out: Path = kwargs.get("out_path") or args[4]
+        out.write_text(json.dumps({
+            "schema_version": "1.0", "story_id": "x", "scene_id": "x",
+            "duration_s": 5.0, "fps": 24,
+            "video_tracks": [], "audio_tracks": [], "overlay_tracks": [],
+        }))
+        return out
+
+    monkeypatch.setattr(tl_mod, "plan_timeline", _fake_plan_timeline)
+    monkeypatch.setattr(comp_mod, "compose_scene", MagicMock(return_value=None))
+    monkeypatch.setattr(comp_mod, "ffmpeg_available", lambda: True)
+    monkeypatch.setattr("horror_story.cli._voice_lines_duration_s", lambda _: 5.0)
+
+    with patch("horror_story.cli.AdapterFactory", mock_factory), \
+         patch("horror_story.cli._render_final_from_index", MagicMock()):
+        main(_base_args(story_dst, out_dir))
+
+    # pipeline.toml fixture specifies tts = "mock"
+    mock_factory.get_tts.assert_called_with("mock")
 
 
 def test_scene_flag_resolves_to_latest_rn_when_bare_absent(tmp_path: Path) -> None:

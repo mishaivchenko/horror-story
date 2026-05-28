@@ -895,3 +895,148 @@ def test_short_segment_not_split(tmp_path: Path) -> None:
     entries = json.loads(out_timing.read_text())["segments"]
     assert len(entries) == 1
     assert entries[0]["seg_id"] == "seg-0"
+
+
+# ---------------------------------------------------------------------------
+# UK-based chunking (#033 / bilingual fix Workstream B)
+# ---------------------------------------------------------------------------
+
+# Short English (fits in 1 chunk) but long Ukrainian that needs 2+ chunks
+_SHORT_EN_LONG_UK = (
+    "The door creaked."
+)
+
+# 75-word Ukrainian-style text that will overflow a small max_lines budget
+_LONG_UK_TEXT = (
+    "Двері заскрипіли в темряві старого маєтку де тіні танцювали по стінах "
+    "і холодний вітер завивав крізь розбиті шибки нагадуючи про давно забуті "
+    "страхи та жахіття що колись населяли ці похмурі кімнати сповнені болем "
+    "і розпачем покинутих душ які не знаходять спокою навіть після смерті"
+)
+
+_SCRIPT_SHORT_EN_LONG_UK = {
+    "schema_version": "1.0",
+    "story_id": "pigeons-from-hell",
+    "scene_id": "scene-uk-long",
+    "segments": [
+        {
+            "segment_id": "seg-0",
+            "text_en": _SHORT_EN_LONG_UK,
+            "text_secondary": _LONG_UK_TEXT,
+            "pacing_ms": 10000,
+            "voice_id": "en-narrator-01",
+        }
+    ],
+    "dialogue_lines": [],
+    "total_duration_ms": 10000,
+}
+
+_SCRIPT_NO_SECONDARY = {
+    "schema_version": "1.0",
+    "story_id": "pigeons-from-hell",
+    "scene_id": "scene-no-uk",
+    "segments": [
+        {
+            "segment_id": "seg-0",
+            "text_en": _LONG_TEXT,
+            "text_secondary": "",
+            "pacing_ms": 10000,
+            "voice_id": "en-narrator-01",
+        }
+    ],
+    "dialogue_lines": [],
+    "total_duration_ms": 10000,
+}
+
+
+def test_long_secondary_short_english_splits_on_uk(tmp_path: Path) -> None:
+    """When text_secondary is long but text_en is short, chunking uses UK text.
+
+    Expected:
+    - Multiple timing entries are emitted (UK text overflows one chunk).
+    - No timing entry has text_uk == "".
+    - Each text_uk chunk is a non-empty substring of the original UK text.
+    - text_en is preserved as the full English original on every entry.
+    """
+    adapter = MockTypographyAdapter()
+    scene_id = "scene-uk-long"
+    timeline = _make_minimal_timeline(scene_id, _SCRIPT_SHORT_EN_LONG_UK["segments"])
+    out_timing = tmp_path / f"typography_{scene_id}_timing.json"
+    adapter.render(
+        script=_SCRIPT_SHORT_EN_LONG_UK,
+        timeline=timeline,
+        scene_id=scene_id,
+        seed=42,
+        out_dir=tmp_path,
+        out_timing=out_timing,
+        width=320,
+        height=240,
+    )
+    entries = json.loads(out_timing.read_text())["segments"]
+
+    assert len(entries) > 1, (
+        "Long UK text must force the segment to split into multiple timing entries"
+    )
+
+    for entry in entries:
+        assert entry["text_uk"] != "", (
+            f"text_uk must not be empty on any chunk, got empty on seg_id={entry['seg_id']!r}"
+        )
+        # Each chunk must be a contiguous word-run present in the original UK text
+        chunk_words = entry["text_uk"].split()
+        assert len(chunk_words) > 0, "text_uk chunk must contain words"
+        # Verify the chunk words appear in order in the original UK text
+        uk_words = _LONG_UK_TEXT.split()
+        chunk_str = " ".join(chunk_words)
+        assert chunk_str in _LONG_UK_TEXT, (
+            f"text_uk chunk {chunk_str!r} not found in original UK text"
+        )
+        # text_en is the full English original (unchanged)
+        assert entry["text_en"] == _SHORT_EN_LONG_UK, (
+            f"text_en must be full EN original, got {entry['text_en']!r}"
+        )
+
+
+def test_no_secondary_text_falls_back_to_en_chunking(tmp_path: Path) -> None:
+    """When text_secondary is empty, chunking falls back to text_en.
+
+    Expected:
+    - Multiple entries are emitted for long EN text (same as existing split tests).
+    - Each entry has text_uk equal to the EN chunk rendered in that slot.
+    - No entry has text_uk == "".
+    """
+    adapter = MockTypographyAdapter()
+    scene_id = "scene-no-uk"
+    timeline = _make_minimal_timeline(scene_id, _SCRIPT_NO_SECONDARY["segments"])
+    out_timing = tmp_path / f"typography_{scene_id}_timing.json"
+    adapter.render(
+        script=_SCRIPT_NO_SECONDARY,
+        timeline=timeline,
+        scene_id=scene_id,
+        seed=42,
+        out_dir=tmp_path,
+        out_timing=out_timing,
+        width=320,
+        height=240,
+    )
+    entries = json.loads(out_timing.read_text())["segments"]
+
+    # Should still split since _LONG_TEXT is long
+    assert len(entries) > 1, (
+        "Long EN text with no secondary must still split into multiple entries"
+    )
+
+    all_uk = [e["text_uk"] for e in entries]
+    for i, (entry, uk_chunk) in enumerate(zip(entries, all_uk)):
+        assert uk_chunk != "", (
+            f"text_uk must not be empty when falling back to EN (entry {i})"
+        )
+        # text_uk chunk must appear in the original EN text
+        assert uk_chunk in _LONG_TEXT, (
+            f"text_uk chunk {uk_chunk!r} not found in EN source text"
+        )
+    # Reassembled chunks must cover all original EN words
+    all_uk_joined = " ".join(all_uk)
+    assert all_uk_joined.split() == _LONG_TEXT.split(), (
+        "Reassembled text_uk chunks must cover all words of the original EN text"
+    )
