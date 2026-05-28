@@ -31,7 +31,7 @@ class MetricsCollector:
             StageEntry(
                 stage=name,
                 scene_id=scene_id,
-                duration_s=round(time.monotonic() - t0, 3),
+                duration_s=max(round(time.monotonic() - t0, 3), 0.001),
             )
         )
 

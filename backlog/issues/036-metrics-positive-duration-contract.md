@@ -1,6 +1,6 @@
 # Issue #036 — Metrics: enforce positive stage durations
 
-**Status:** Open
+**Status:** Closed
 **Sprint:** 07
 **Priority:** P1
 **Labels:** metrics, schema, bug

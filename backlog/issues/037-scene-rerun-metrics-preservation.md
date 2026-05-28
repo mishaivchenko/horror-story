@@ -1,6 +1,6 @@
 # Issue #037 — Metrics: preserve full-run metrics during `--scene` reruns
 
-**Status:** Open
+**Status:** Closed
 **Sprint:** 07
 **Priority:** P1
 **Labels:** metrics, cli, regen, bug

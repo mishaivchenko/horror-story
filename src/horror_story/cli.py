@@ -624,9 +624,24 @@ def _cmd_run(args: argparse.Namespace) -> None:
 
         print(f"[composed] {args.scene} → {composed_path}")
 
-        _render_final_from_index(base_run_dir, manifest, config, seed, index_path)
+        # Only attempt final render if every scene in the run is complete.
+        from horror_story.manifest import ArtifactIndex
+        _ai = ArtifactIndex.from_path(index_path)
+        _incomplete = [
+            sid for sid in manifest.scene_order()
+            if not (_ai.scenes.get(sid) and _ai.scenes[sid].status == "complete")
+        ]
+        if _incomplete:
+            print(
+                f"[info] skipping final render: {len(_incomplete)} scene(s) still incomplete.",
+                file=sys.stderr,
+            )
+        else:
+            with scene_metrics.stage("render"):
+                _render_final_from_index(base_run_dir, manifest, config, seed, index_path)
 
-        scene_metrics.write(base_run_dir / "metrics.json")
+        # Write to a revision-scoped file to avoid overwriting the full-run metrics.
+        scene_metrics.write(base_run_dir / f"metrics_{args.scene}_{suffix[1:]}.json")
 
         if args.validate:
             _validate_run_dir(base_run_dir)
@@ -772,6 +787,7 @@ _GLOB_SCHEMA: list[tuple[str, str]] = [
     ("video/scene_*_composed.json",   "composed_scene.schema.json"),
     ("video/scene_*_composed_r*.json", "composed_scene.schema.json"),
     ("metrics.json",                  "metrics.schema.json"),
+    ("metrics_*.json",                "metrics.schema.json"),
 ]
 
 

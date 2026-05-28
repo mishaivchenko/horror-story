@@ -17,7 +17,7 @@
         "properties": {
           "stage":      {"type": "string"},
           "scene_id":   {"type": ["string", "null"]},
-          "duration_s": {"type": "number", "minimum": 0}
+          "duration_s": {"type": "number", "exclusiveMinimum": 0}
         }
       }
     }

@@ -2,11 +2,21 @@
 from __future__ import annotations
 
 import json
+import shutil
 from io import StringIO
 from pathlib import Path
 from unittest.mock import patch
 
 from horror_story.metrics import MetricsCollector
+
+FIXTURES = Path(__file__).parent / "fixtures"
+
+
+def _setup_story(tmp_path: Path) -> tuple[Path, Path]:
+    story_dst = tmp_path / "mini-story.txt"
+    shutil.copy(FIXTURES / "mini-story.txt", story_dst)
+    shutil.copy(FIXTURES / "pipeline.toml", tmp_path / "pipeline.toml")
+    return story_dst, tmp_path / "out"
 
 
 def _make_collector() -> MetricsCollector:
@@ -20,7 +30,7 @@ def test_stage_timer_records_duration() -> None:
     assert len(metrics._stages) == 1
     entry = metrics._stages[0]
     assert entry.stage == "parse"
-    assert entry.duration_s >= 0
+    assert entry.duration_s > 0
 
 
 def test_stage_timer_records_scene_id() -> None:
@@ -104,6 +114,34 @@ def test_write_validates_against_schema(tmp_path: Path) -> None:
     validate(instance, "metrics.schema.json")
 
 
+def test_noop_stage_duration_is_positive() -> None:
+    """A no-op stage must record duration_s > 0 (clamped to 0.001)."""
+    metrics = _make_collector()
+    with metrics.stage("parse"):
+        pass
+    assert metrics._stages[0].duration_s > 0
+
+
+def test_schema_rejects_zero_duration(tmp_path: Path) -> None:
+    """metrics.schema.json must reject duration_s = 0."""
+    import jsonschema
+    from horror_story.schemas import validate
+
+    instance = {
+        "schema_version": "1.0",
+        "story_id": "x",
+        "run_id": "r",
+        "scene_id": None,
+        "total_s": 1.0,
+        "stages": [{"stage": "parse", "scene_id": None, "duration_s": 0}],
+    }
+    try:
+        validate(instance, "metrics.schema.json")
+        raise AssertionError("schema should have rejected duration_s=0")
+    except jsonschema.ValidationError:
+        pass
+
+
 def test_multiple_stages_recorded(tmp_path: Path) -> None:
     metrics = _make_collector()
     with metrics.stage("parse"):
@@ -168,6 +206,66 @@ def test_stats_no_metrics_files(tmp_path: Path, capsys: object) -> None:
     main(["stats", "--out", str(tmp_path), "--story", "nonexistent"])
     captured = getattr(capsys, "readouterr")()
     assert "no metrics" in captured.out
+
+
+# ---------------------------------------------------------------------------
+# #037 — scene-rerun metrics preservation
+# ---------------------------------------------------------------------------
+
+def test_scene_rerun_does_not_overwrite_full_run_metrics(tmp_path: Path) -> None:
+    """--scene rerun must write a revision-scoped metrics file, not overwrite metrics.json."""
+    from horror_story.cli import main
+
+    story_dst, out_dir = _setup_story(tmp_path)
+
+    # Full run
+    main(["run", "--story", str(story_dst), "--out", str(out_dir), "--seed", "42"])
+
+    run_dir = out_dir / "run_mini-story_42"
+    full_metrics = run_dir / "metrics.json"
+    assert full_metrics.exists(), "full-run metrics.json must exist"
+    original_content = full_metrics.read_text()
+
+    # --scene rerun
+    first_scene = list(
+        json.loads((run_dir / "artifact_index.json").read_text())["scenes"].keys()
+    )[0]
+    main(["run", "--story", str(story_dst), "--out", str(out_dir),
+          "--seed", "42", "--scene", first_scene])
+
+    # Original metrics.json must be unchanged
+    assert full_metrics.read_text() == original_content, (
+        "--scene rerun must not overwrite the full-run metrics.json"
+    )
+
+    # A revision-scoped metrics file must exist
+    rerun_metrics = list(run_dir.glob(f"metrics_{first_scene}_r*.json"))
+    assert len(rerun_metrics) == 1, (
+        f"Expected one revision-scoped metrics file, found: {rerun_metrics}"
+    )
+
+
+def test_scene_rerun_metrics_includes_pipeline_stages(tmp_path: Path) -> None:
+    """Scene-rerun metrics file must contain at least the core pipeline stages."""
+    from horror_story.cli import main
+
+    story_dst, out_dir = _setup_story(tmp_path)
+
+    main(["run", "--story", str(story_dst), "--out", str(out_dir), "--seed", "42"])
+
+    run_dir = out_dir / "run_mini-story_42"
+    first_scene = list(
+        json.loads((run_dir / "artifact_index.json").read_text())["scenes"].keys()
+    )[0]
+    main(["run", "--story", str(story_dst), "--out", str(out_dir),
+          "--seed", "42", "--scene", first_scene])
+
+    rerun_metrics_path = list(run_dir.glob(f"metrics_{first_scene}_r*.json"))[0]
+    data = json.loads(rerun_metrics_path.read_text())
+    stage_names = {s["stage"] for s in data["stages"]}
+    expected = {"script_gen", "tts", "image", "motion", "audio", "timeline", "typography", "compositor"}
+    missing = expected - stage_names
+    assert not missing, f"Scene-rerun metrics missing stages: {missing}"
 
 
 def test_stats_respects_n(tmp_path: Path) -> None:
