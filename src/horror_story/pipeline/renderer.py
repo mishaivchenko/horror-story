@@ -119,7 +119,6 @@ def _make_card_mp4(
         "-c:a", "aac",
         "-t", str(duration_s),
         "-r", str(fps),
-        "-fflags", "+bitexact",
         str(out_path),
     ]
     subprocess.run(cmd, check=True, capture_output=True)
@@ -190,7 +189,10 @@ def render_final(
         end_mp4 = td / "end_card.mp4"
         _make_card_mp4(end_png, 2.0, width, height, fps, end_mp4, fade_out=True)
 
-        # 3. Re-encode each scene clip to uniform params so concat works cleanly
+        # 3. Re-encode each scene clip to uniform params so concat works cleanly.
+        # -fflags +bitexact is intentionally omitted here: it causes AAC bitstream
+        # issues in ffmpeg 8.x that make the decoder reject the stream in the concat
+        # pass. Determinism is enforced by the seeded inputs, not bitexact re-encodes.
         reencoded: list[Path] = []
         for i, sp in enumerate(scene_paths):
             re_path = td / f"scene_{i:03d}.mp4"
@@ -198,9 +200,8 @@ def render_final(
                 "ffmpeg", "-y",
                 "-i", str(sp),
                 "-c:v", "libx264", "-pix_fmt", "yuv420p",
-                "-c:a", "aac",
+                "-c:a", "aac", "-ar", "44100",
                 "-r", str(fps),
-                "-fflags", "+bitexact",
                 str(re_path),
             ]
             subprocess.run(cmd_re, check=True, capture_output=True)
@@ -222,7 +223,6 @@ def render_final(
             "-c:v", "libx264", "-pix_fmt", "yuv420p",
             "-c:a", "aac", "-b:a", "192k",
             "-movflags", "+faststart",
-            "-fflags", "+bitexact",
             str(tmp_out),
         ]
         subprocess.run(cmd_concat, check=True, capture_output=True)

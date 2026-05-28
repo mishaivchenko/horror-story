@@ -5,7 +5,7 @@ import json
 import re
 import sys
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from contextlib import contextmanager
 from typing import Generator
@@ -48,6 +48,13 @@ def _build_parser() -> argparse.ArgumentParser:
         metavar="NAME",
         default=None,
         help="Override the image adapter from pipeline.toml (e.g. mock, mflux-schnell).",
+    )
+    run_p.add_argument(
+        "--lang",
+        choices=["en", "uk"],
+        default=None,
+        metavar="LANG",
+        help="Override TTS language. 'en' uses kokoro adapter; 'uk' uses piper adapter.",
     )
 
     # validate
@@ -92,6 +99,28 @@ def _locate_toml(story_path: Path) -> Path:
         f"pipeline.toml not found next to {story_path}. "
         "Create one or point --story at a directory containing pipeline.toml."
     )
+
+
+def _resolve_lang_config(lang: str | None, config: "Any") -> "Any":
+    """Override the TTS adapter based on the --lang flag.
+
+    'en' → kokoro adapter; 'uk' → piper adapter.
+    None → config unchanged.
+    """
+    import dataclasses as _dc
+    if lang is None:
+        return config
+    if lang == "en":
+        return _dc.replace(
+            config,
+            adapters=_dc.replace(config.adapters, tts="kokoro"),
+        )
+    if lang == "uk":
+        return _dc.replace(
+            config,
+            adapters=_dc.replace(config.adapters, tts="piper"),
+        )
+    return config
 
 
 def _resolve_latest_run(out_dir: Path, base_run_id: str) -> Path | None:
@@ -196,8 +225,17 @@ def _run_scene(
         tts = AdapterFactory.get_tts(adapters.tts)
         primary_lang = str(manifest.languages.get("primary", "en"))
         secondary_lang = str(manifest.languages.get("secondary", ""))
-        # Synthesize in secondary language when available, fall back to primary.
-        tts_lang = secondary_lang if secondary_lang else primary_lang
+        # Derive language and text-selection from the TTS adapter name:
+        # piper → Ukrainian (secondary) text + lang; kokoro/mock → English (primary).
+        _tts_adapter = str(adapters.tts)
+        if _tts_adapter == "piper":
+            tts_lang = secondary_lang if secondary_lang else primary_lang
+            tts_text_fn: Callable[[Any], str] = (
+                lambda x: str(x.text_secondary) if getattr(x, "text_secondary", "") else str(x.text_en)
+            )
+        else:
+            tts_lang = primary_lang
+            tts_text_fn = lambda x: str(x.text_en)  # noqa: E731
 
         # Stage 3: TTS narration + dialogue
         voice_line_sidecars: list[Path] = []
@@ -206,9 +244,8 @@ def _run_scene(
                 seg_seed = _per_scene_seed(seed, scene_index, 3)
                 wav_path = audio_dir / f"narration_{scene_id}_{seg.segment_id}{suffix}.wav"
                 print(f"[tts/narration] {scene_id}/{seg.segment_id} → {wav_path}")
-                tts_text = seg.text_secondary if seg.text_secondary else seg.text_en
                 tts.synthesize(
-                    text=tts_text,
+                    text=tts_text_fn(seg),
                     voice_id=seg.voice_id,
                     language=tts_lang,
                     pacing_ms=seg.pacing_ms,
@@ -226,9 +263,8 @@ def _run_scene(
                 dlg_seed = _per_scene_seed(seed, scene_index, 4)
                 wav_path = audio_dir / f"dialogue_{scene_id}_{dlg.line_id}{suffix}.wav"
                 print(f"[tts/dialogue] {scene_id}/{dlg.line_id} → {wav_path}")
-                dlg_text = dlg.text_secondary if dlg.text_secondary else dlg.text_en
                 tts.synthesize(
-                    text=dlg_text,
+                    text=tts_text_fn(dlg),
                     voice_id=dlg.voice_id,
                     language=tts_lang,
                     pacing_ms=dlg.pacing_ms,
@@ -506,6 +542,8 @@ def _cmd_run(args: argparse.Namespace) -> None:
             config,
             adapters=dataclasses.replace(config.adapters, image=args.image_adapter),
         )
+
+    config = _resolve_lang_config(getattr(args, "lang", None), config)
 
     seed = config.story.seed
     width = config.render.width

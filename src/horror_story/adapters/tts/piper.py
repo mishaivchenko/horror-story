@@ -34,6 +34,19 @@ _VOICE_MAP: dict[str, tuple[str, int | None]] = {
 _DEFAULT_LANG = "uk"
 
 
+def _normalize_text_type(text: str, phoneme_map: set[str]) -> str:
+    """Prepare text for text-type Piper models (character-level phoneme maps).
+
+    Collapses whitespace variants to plain space, lowercases, then drops any
+    character not present in the model's phoneme_id_map.
+    """
+    import re as _re
+    text = _re.sub(r"[\r\n\t\xa0​]+", " ", text)
+    text = text.lower()
+    text = "".join(c for c in text if c in phoneme_map)
+    return text.strip()
+
+
 def _piper_available() -> bool:
     return importlib.util.find_spec("piper") is not None
 
@@ -90,6 +103,10 @@ class PiperTTSAdapter(TTSAdapter):
 
         lang, _ = _VOICE_MAP.get(voice_id, (_DEFAULT_LANG, None))
         voice = self._load_voice(lang)
+
+        from piper.config import PhonemeType
+        if voice.config.phoneme_type == PhonemeType.TEXT:
+            text = _normalize_text_type(text, set(voice.config.phoneme_id_map.keys()))
 
         tmp = out_path.with_suffix(".wav.tmp")
         with wave.open(str(tmp), "wb") as wf:
